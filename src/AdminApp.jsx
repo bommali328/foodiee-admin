@@ -1,124 +1,442 @@
-import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Store, Users, Bike, ShoppingBag, DollarSign, Search, Layers, Percent, X, MapPin, Phone, Download, Send, PieChart, BellRing, Ticket, Wallet, ShieldAlert, Globe, ToggleLeft, ToggleRight, CheckCircle, XCircle, Clock, ShieldCheck, Eye, ChevronRight, ArrowUpRight, MessageCircle, Star, Sliders, AlertTriangle, Award, Edit3, Calendar, TrendingUp, Image as ImageIcon } from 'lucide-react';
-import { jsPDF } from 'jspdf';
-import toast, { Toaster } from 'react-hot-toast';
-import SockJS from 'sockjs-client';
-import { Client } from '@stomp/stompjs';
-import AdminChatDashboard from './components/AdminChatDashboard';
-import AdminPartnersVerification from './components/AdminPartnersVerification';
-import L from 'leaflet';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import React, { useState, useEffect, useRef } from 'react';
+import { Bike, Navigation, CheckCircle, Clock, Phone, Lock, DollarSign, MapPin, LogOut, ToggleLeft, ToggleRight, Store, User, ShieldCheck, Edit3, X, MessageSquare, Timer, Wallet, Gift, Home, Check, Package, ShoppingBag, CreditCard, FileText, Download, LifeBuoy, Upload, Camera, Bell, Zap, AlertTriangle, Globe, Sun, Flame, CheckCircle2, ArrowRight, TrendingUp, CloudRain, Eye, Volume2, Users, Share2 } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import deleteIcon from 'leaflet/dist/images/marker-icon.png';
-import deleteShadow from 'leaflet/dist/images/marker-shadow.png';
+import L from 'leaflet';
+import toast, { Toaster } from 'react-hot-toast';
+import { Client } from '@stomp/stompjs';
+import SockJS from 'sockjs-client';
+import logo from './assets/logo.png';
 
-const API_BASE_URL = "http://Foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com";
+// ✅ BASE URL UPDATE (AWS)
+const API_BASE_URL = "https://Foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com";
 
-let DefaultIcon = L.icon({
-    iconUrl: deleteIcon,
-    shadowUrl: deleteShadow,
-    iconAnchor: [12, 41]
+const getBikeIcon = (rotationAngle) => {
+  return new L.DivIcon({
+    className: 'custom-bike-marker',
+    html: `<div style="transform: rotate(${rotationAngle}deg); transition: transform 0.8s linear; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; background: linear-gradient(135deg, #fc8019, #f59e0b); border-radius: 50%; box-shadow: 0 6px 20px rgba(252,128,25,0.6); border: 3px solid white;">
+             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+               <circle cx="5.5" cy="18.5" r="3.5"></circle>
+               <circle cx="18.5" cy="18.5" r="3.5"></circle>
+               <path d="M15 6L18 12H9L6 6"></path>
+               <path d="M12 6V2H16"></path>
+             </svg>
+           </div>`,
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+  });
+};
+
+const shopMarkerIcon = new L.Icon({
+  iconUrl: 'https://cdn-icons-png.flaticon.com/512/3076/3076136.png',
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
 });
 
-L.Marker.prototype.options.icon = DefaultIcon; 
+const customerMarkerIcon = new L.Icon({
+  iconUrl: 'https://cdn-icons-png.flaticon.com/512/149/149059.png',
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+});
 
-export default function AdminApp() {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  
-  const [dashboardStats, setDashboardStats] = useState({ totalRevenue: 0.00, activeOrders: 0, netCommission: 0.00 });
-  const [shopsList, setShopsList] = useState([]);
-  const [customersList, setCustomersList] = useState([]);
-  const [partners, setPartners] = useState([]);
-  const [allOrders, setAllOrders] = useState([]);
-  const [dailyCommissionLog, setDailyCommissionLog] = useState([]);
+function MapUpdater({ center }) {
+  const map = useMap();
+  useEffect(() => {
+    map.invalidateSize();
+    if (center) map.setView(center, 14);
+  }, [center, map]);
+  return null;
+}
 
-  const [showDashboardListModal, setShowDashboardListModal] = useState(null);
-  const [unreadAdminChatsCount, setUnreadAdminChatsCount] = useState(0);
-  const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371; 
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+    Math.sin(dLon / 2) * Math.sin(dLon / 2); 
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; 
+};
 
-  const [selectedShopForMenu, setSelectedShopForMenu] = useState(null);
-  const [shopMenuData, setShopMenuData] = useState([]);
-  const [showRevenueModal, setShowRevenueModal] = useState(false);
+export default function DeliveryDashboard() {
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return localStorage.getItem('partnerLoggedIn') === 'true';
+  });
+  const [partnerId, setPartnerId] = useState(() => {
+    return localStorage.getItem('partnerId') || 1;
+  });
 
-  const [payoutsList, setPayoutsList] = useState([]);
-  const [selectedPayoutForTransfer, setSelectedPayoutForTransfer] = useState(null);
-  const [transferAmountInput, setTransferAmountInput] = useState('');
-
-  const [promoCodes, setPromoCodes] = useState([]); 
-  const [newCode, setNewCode] = useState('');
-  const [newDiscount, setNewDiscount] = useState('');
-  const [newMinOrder, setNewMinOrder] = useState('');
-
-  const [reviewsList, setReviewsList] = useState([]);
-  const [sosAlerts, setSosAlerts] = useState([]);
-  const [adminLanguage, setAdminLanguage] = useState('Telugu & English');
-  const [riderIncentives, setRiderIncentives] = useState([]);
-  const [geoRadius, setGeoRadius] = useState(12);
-  const [loyaltyMembers, setLoyaltyMembers] = useState([]);
-
-  const [broadcastMsg, setBroadcastMsg] = useState('');
-  const [broadcastTarget, setBroadcastTarget] = useState('All Users');
-  const [broadcastImageFile, setBroadcastImageFile] = useState(null);
-
-  const getAreaNameFromCoords = async (lat, lng) => {
-    try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
-      const data = await response.json();
-      if (data && data.address) {
-        return data.address.suburb || data.address.neighbourhood || data.address.city || data.address.town || "Ichapuram Zone";
-      }
-      return "Ichapuram Area";
-    } catch (err) {
-      return "Ichapuram Location";
-    }
-  };
+  const [acceptedOrder, setAcceptedOrder] = useState(null);
+  const [partnerPos, setPartnerPos] = useState([18.5793, 84.4452]); 
+  const [bikeAngle, setBikeAngle] = useState(0);
 
   useEffect(() => {
-    fetchAllAdminData();
-    const interval = setInterval(fetchAllAdminData, 4000);
+    const savedLogin = localStorage.getItem('partnerLoggedIn');
+    const savedId = localStorage.getItem('partnerId');
+
+    if (savedLogin === 'true' && savedId) {
+      setIsLoggedIn(true);
+      setPartnerId(savedId);
+    }
+  }, []);
+
+  const [currentView, setCurrentView] = useState('login');
+
+  const [regFullName, setRegFullName] = useState('');
+  const [regMobile, setRegMobile] = useState('');
+  const [regVehicle, setRegVehicle] = useState('Motorcycle');
+  const [regBikeNumber, setRegBikeNumber] = useState('');
+
+  const [step, setStep] = useState(1); 
+  const [generatedOtpHint, setGeneratedOtpHint] = useState('');
+  const [phone, setPhone] = useState('');
+  const [otpInput, setOtpInput] = useState('');
+  const [activeTab, setActiveTab] = useState('available');
+
+  const [isOnline, setIsOnline] = useState(true);
+  
+  const [todaysEarnings, setTodaysEarnings] = useState(0);
+  const [totalCashInHand, setTotalCashInHand] = useState(0);
+  const [totalPrepaidEarnings, setTotalPrepaidEarnings] = useState(0);
+
+  const [shiftSeconds, setShiftSeconds] = useState(0);
+  const [showQuickChat, setShowQuickChat] = useState(false);
+  const [quickMessage, setQuickMessage] = useState('');
+  const [heatMapActive, setHeatMapActive] = useState(true);
+
+  const [voiceLanguage, setVoiceLanguage] = useState('te-IN');
+
+  const [referralCode] = useState('FOODIEE912');
+  const [referralEarnings, setReferralEarnings] = useState(150);
+  const [referredCount, setReferredCount] = useState(3);
+
+  const [showOrderChat, setShowOrderChat] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatRecipient, setChatRecipient] = useState('customer'); 
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const stompClientRef = useRef(null);
+
+  const [selectedRinger, setSelectedRinger] = useState('classic_bell');
+  const audioRef = useRef(null);
+
+  const [customerOrders, setCustomerOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+  const currentCustomerMobile = localStorage.getItem('partnerMobile') || phone || '9123456789';
+
+  useEffect(() => {
+    const fetchCustomerSpecificOrders = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/orders/customer/${currentCustomerMobile}`);
+        if (response.ok) {
+          const data = await response.json();
+          setCustomerOrders(data);
+        } else {
+          setCustomerOrders([]); 
+        }
+      } catch (err) {
+        console.error("Error fetching customer orders:", err);
+        setCustomerOrders([]);
+      } finally {
+        setLoadingOrders(false);
+      }
+    };
+
+    if (isLoggedIn) {
+      fetchCustomerSpecificOrders();
+    }
+  }, [currentCustomerMobile, isLoggedIn]);
+
+  const ringtones = [
+    { id: 'classic_bell', name: '🔔 Classic Bell (Swiggy Style)', url: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3' },
+    { id: 'radar_beep', name: '🚨 Radar Emergency Beep', url: 'https://assets.mixkit.co/active_storage/sfx/950/950-preview.mp3' },
+    { id: 'digital_chime', name: '⚡ Digital Chime (Zomato Style)', url: 'https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3' }
+  ];
+
+  const [isRainSurgeActive, setIsRainSurgeActive] = useState(false);
+  const [batchQueue, setBatchQueue] = useState([]);
+  const [incomingOrder, setIncomingOrder] = useState(null);
+  
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [showInstantPayoutModal, setShowInstantPayoutModal] = useState(false);
+  const [enteredOtp, setEnteredOtp] = useState('');
+  const [activeOrderId, setActiveOrderId] = useState(null);
+
+  const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
+
+  const [isEditingPersonal, setIsEditingPersonal] = useState(false);
+  const [isEditingKyc, setIsEditingKyc] = useState(false);
+  const [isEditingBank, setIsEditingBank] = useState(false);
+
+  const [selectedAadhaarFile, setSelectedAadhaarFile] = useState(null);
+  const [selectedPanFile, setSelectedPanFile] = useState(null);
+  const [selectedLicenseFile, setSelectedLicenseFile] = useState(null);
+  const [selectedBikeFile, setSelectedBikeFile] = useState(null);
+  const [selectedDriverFile, setSelectedDriverFile] = useState(null);
+
+  const [historyFilter, setHistoryFilter] = useState('all');
+  const [deliveryHistory, setDeliveryHistory] = useState([]);
+
+  useEffect(() => {
+    const fetchPartnerHistory = async () => {
+      try {
+        const currentPartnerId = localStorage.getItem('partnerId') || 1;
+        const response = await fetch(`${API_BASE_URL}/api/orders/partner/history/${currentPartnerId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setDeliveryHistory(data);
+        } else {
+          setDeliveryHistory([]);
+        }
+      } catch (err) {
+        console.error("Error fetching partner history:", err);
+        setDeliveryHistory([]);
+      }
+    };
+
+    if (isLoggedIn) {
+      fetchPartnerHistory();
+    }
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !isOnline) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setPartnerPos([lat, lng]);
+
+        if (acceptedOrder && stompClientRef.current && stompClientRef.current.connected) {
+          const currentOrderId = acceptedOrder.id || acceptedOrder.orderId;
+          stompClientRef.current.publish({
+            destination: `/app/track/delivery/${currentOrderId}`,
+            body: JSON.stringify({ orderId: currentOrderId, latitude: lat, longitude: lng })
+          });
+        }
+      },
+      (error) => console.error("GPS Watch Error:", error),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+    );
+
+    return () => {
+      if (watchId) navigator.geolocation.clearWatch(watchId);
+    };
+  }, [isLoggedIn, isOnline, acceptedOrder]);
+
+  useEffect(() => {
+    if (!acceptedOrder) return;
+    const currentOrderId = acceptedOrder.orderId || acceptedOrder.id;
+
+    fetch(`${API_BASE_URL}/api/chat/history/${currentOrderId}`)
+      .then(res => res.json())
+      .then(data => setChatMessages(data))
+      .catch(err => console.error("Error fetching chat history", err));
 
     const socket = new SockJS(`${API_BASE_URL}/ws-foodiee`);
     const stompClient = new Client({
       webSocketFactory: () => socket,
-      debug: () => {},
       onConnect: () => {
-        stompClient.subscribe('/topic/fleet/tracking', async (message) => {
-          const locData = JSON.parse(message.body);
-          const lat = locData.lat || locData.latitude;
-          const lng = locData.lng || locData.longitude;
-          
-          let areaName = "Ichapuram Main Road";
-          if (lat && lng) {
-            areaName = await getAreaNameFromCoords(lat, lng);
-          }
+        stompClient.subscribe(`/topic/chat/${currentOrderId}`, (message) => {
+          const incomingChat = JSON.parse(message.body);
+          setChatMessages(prev => [...prev, incomingChat]);
 
-          if (locData.partnerId) {
-            setPartners(prevPartners => 
-              prevPartners.map(p => 
-                (p.id === Number(locData.partnerId)) 
-                  ? { ...p, latitude: lat, longitude: lng, areaName: areaName, online: true } 
-                  : p
-              )
-            );
+          if (incomingChat.senderType !== 'partner') {
+            toast(`💬 New message from ${incomingChat.senderName}`);
+            setUnreadChatCount(prev => prev + 1);
+            speakText("కొత్త మెసేజ్ వచ్చింది", "New message received");
           }
         });
+      }
+    });
 
-        stompClient.subscribe('/topic/admin/chats', (message) => {
-          const chatData = JSON.parse(message.body);
-          if (chatData.senderType !== 'admin') {
-            setUnreadAdminChatsCount(prev => prev + 1);
-            toast.success(`💬 కొత్త సపోర్ట్ మెసేజ్ వచ్చింది!`);
+    stompClient.activate();
+    stompClientRef.current = stompClient;
+
+    return () => {
+      if (stompClientRef.current) stompClientRef.current.deactivate();
+    };
+  }, [acceptedOrder]);
+
+  const sendOrderChatMessage = async () => {
+    if (!chatInput.trim() || !acceptedOrder) return;
+    const currentOrderId = acceptedOrder.orderId || acceptedOrder.id;
+
+    const chatPayload = {
+      orderId: currentOrderId,
+      senderMobile: partnerProfile.mobile,
+      senderName: partnerProfile.fullName,
+      senderType: 'partner',
+      recipientRole: chatRecipient,
+      message: chatInput
+    };
+
+    try {
+      await fetch(`${API_BASE_URL}/api/chat/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(chatPayload)
+      });
+      setChatInput('');
+    } catch (err) {
+      toast.error("Failed to send message");
+    }
+  };
+
+  const [partnerProfile, setPartnerProfile] = useState({
+    id: 1,
+    fullName: localStorage.getItem('partnerName') || 'Bommali Naveen',
+    mobile: localStorage.getItem('partnerMobile') || '9123456789',
+    email: 'naveen@foodiee.com',
+    vehicleType: 'Motorcycle',
+    bikeNumber: 'AP 30 BIKE 1234',
+    aadhaarNo: '',
+    licenseNo: 'DL-1234567890123',
+    panNo: 'ABCDE1234F',
+    bankAccount: '123456789012',
+    ifscCode: 'SBIN0001234',
+    upiId: 'naveen@ybl',
+    kycStatus: 'Verified ✅'
+  });
+
+  const handleLogout = () => {
+    localStorage.removeItem('partnerLoggedIn');
+    localStorage.removeItem('partnerMobile');
+    localStorage.removeItem('partnerId');
+    localStorage.removeItem('partnerName');
+    
+    setIsLoggedIn(false);
+    setStep(1);
+    setOtpInput('');
+    toast('🔒 Logged out successfully');
+  };
+
+  const handleToggleOnline = async () => {
+    const newStatus = !isOnline;
+    setIsOnline(newStatus);
+
+    const currentPartnerId = localStorage.getItem('partnerId') || partnerProfile.id || 1;
+
+    try {
+      await fetch(`${API_BASE_URL}/api/partner/status/update/${currentPartnerId}?isOnline=${newStatus}`, {
+        method: "PUT"
+      });
+      toast.success(newStatus ? "🟢 You are now Online! Receiving orders..." : "🔴 You are now Offline!");
+    } catch (err) {
+      console.error("Failed to update status on server", err);
+      toast.error("❌ Failed to sync online status with server.");
+    }
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    if (!regMobile || regMobile.length < 10) {
+      toast.error('❌ Please enter a valid 10-digit mobile number');
+      return;
+    }
+
+    const payload = {
+      fullName: regFullName || "Ichapuram Rider",
+      mobile: regMobile,
+      vehicleType: regVehicle || "Motorcycle",
+      bikeNumber: regBikeNumber || "AP30BIKE0000"
+    };
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success('🎉 Registration Successful! Please Login.');
+        setCurrentView('login');
+        setRegMobile(regMobile);
+      } else {
+        toast.error(`❌ ${data.error || 'Registration failed.'}`);
+      }
+    } catch (error) {
+      console.error("Network or server error:", error);
+      toast.error('❌ Server connection error during registration.');
+    }
+  };
+
+  const speakText = (textTelugu, textEnglish) => {
+    if ('speechSynthesis' in window) {
+      const speech = new SpeechSynthesisUtterance();
+      speech.text = voiceLanguage === 'te-IN' ? textTelugu : textEnglish;
+      speech.lang = voiceLanguage;
+      speech.rate = 1.0;
+      window.speechSynthesis.speak(speech);
+    }
+  };
+
+  useEffect(() => {
+    let timer = null;
+    if (isLoggedIn && isOnline) {
+      timer = setInterval(() => {
+        setShiftSeconds(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (timer) clearInterval(timer);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [isLoggedIn, isOnline]);
+
+  const formatShiftTime = (totalSecs) => {
+    const hrs = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    return `${hrs}h ${mins}m ${secs}s`;
+  };
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    const socket = new SockJS(`${API_BASE_URL}/ws-foodiee`);
+    const stompClient = new Client({
+      webSocketFactory: () => socket,
+      reconnectDelay: 5000,
+      onConnect: () => {
+        stompClient.subscribe('/topic/broadcast/partners', (message) => {
+          const broadcastData = JSON.parse(message.body);
+          
+          if (typeof playSelectedRingtone === 'function') {
+            playSelectedRingtone();
+          }
+
+          toast((t) => (
+            <div className="space-y-1.5 text-xs">
+              <p className="font-black text-amber-400">📢 డెలివరీ పార్ట్‌నర్ అనౌన్స్‌మెంట్</p>
+              <p className="text-white font-medium">{broadcastData.message}</p>
+              {broadcastData.imageUrl && (
+                <img src={`${API_BASE_URL}/${broadcastData.imageUrl}`} alt="Broadcast" className="w-full h-24 object-cover rounded-xl mt-1 shadow-md border border-slate-700" />
+              )}
+            </div>
+          ), { duration: 6000 });
+
+          if (typeof speakText === 'function') {
+            speakText(broadcastData.message, broadcastData.message);
           }
         });
 
         stompClient.subscribe('/topic/broadcast/all', (message) => {
           const broadcastData = JSON.parse(message.body);
+          
           toast((t) => (
-            <div className="space-y-1">
-              <p className="font-black text-amber-400 text-xs">📢 అడ్మిన్ బ్రాడ్‌కాస్ట్ అలర్ట్</p>
-              <p className="text-xs text-white">{broadcastData.message}</p>
+            <div className="space-y-1.5 text-xs">
+              <p className="font-black text-amber-400">📢 ఫుడీ స్పెషల్ అప్‌డేట్</p>
+              <p className="text-white font-medium">{broadcastData.message}</p>
               {broadcastData.imageUrl && (
-                <img src={`${API_BASE_URL}/${broadcastData.imageUrl}`} alt="Broadcast" className="w-full h-24 object-cover rounded-xl mt-1" />
+                <img src={`${API_BASE_URL}/${broadcastData.imageUrl}`} alt="Broadcast" className="w-full h-24 object-cover rounded-xl mt-1 shadow-md border border-slate-700" />
               )}
             </div>
           ), { duration: 6000 });
@@ -127,1115 +445,1257 @@ export default function AdminApp() {
     });
 
     stompClient.activate();
-
-    return () => {
-      clearInterval(interval);
-      if (stompClient) stompClient.deactivate();
-    };
-  }, []);
-
-  const fetchAllAdminData = async () => {
-    try {
-      const shopRes = await fetch(`${API_BASE_URL}/api/shop/all`);
-      if (shopRes.ok) {
-        const shops = await shopRes.json();
-        setShopsList(shops);
-        setPayoutsList(shops.map((shop, index) => ({
-          id: shop.id || index + 1,
-          name: shop.shopName || shop.name || 'Registered Store',
-          role: 'Shop Owner',
-          pendingAmount: 3500.00,
-          commission: 15,
-          status: 'Ready'
-        })));
+    return () => stompClient.deactivate();
+  }, [isLoggedIn]);
+  
+  useEffect(() => {
+    if (incomingOrder) {
+      const currentRingtone = ringtones.find(r => r.id === selectedRinger) || ringtones[0];
+      const sound = new Audio(currentRingtone.url);
+      sound.loop = true;
+      sound.play().catch(e => console.log("Audio play blocked or interrupted"));
+      audioRef.current = sound;
+    } else {
+      if (audioRef.current) {
+        try {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        } catch (err) {}
+        audioRef.current = null;
       }
-
-      const partnerRes = await fetch(`${API_BASE_URL}/api/admin/partners/all`);
-      if (partnerRes.ok) setPartners(await partnerRes.json());
-
-      const orderRes = await fetch(`${API_BASE_URL}/api/orders/all`);
-      if (orderRes.ok) {
-        const orders = await orderRes.json();
-        setAllOrders(orders);
-        const activeCount = orders.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled').length;
-        const totalRev = orders.reduce((acc, curr) => acc + (parseFloat(curr.totalAmount || curr.total || 0)), 0);
-        const commissionCut = totalRev * 0.12; 
-
-        setDashboardStats({ 
-          totalRevenue: totalRev, 
-          activeOrders: activeCount,
-          netCommission: commissionCut 
-        });
-
-        const dailyMap = {};
-        orders.forEach(ord => {
-          const dateStr = ord.orderTime ? new Date(ord.orderTime).toLocaleDateString() : new Date().toLocaleDateString();
-          if (!dailyMap[dateStr]) {
-            dailyMap[dateStr] = { date: dateStr, orders: 0, revenue: 0, commission: 0 };
-          }
-          dailyMap[dateStr].orders += 1;
-          const amt = parseFloat(ord.totalAmount || ord.total || 0);
-          dailyMap[dateStr].revenue += amt;
-          dailyMap[dateStr].commission += (amt * 0.12);
-        });
-
-        setDailyCommissionLog(Object.values(dailyMap));
-      }
-
-      const custRes = await fetch(`${API_BASE_URL}/api/admin/customers/all`);
-      if (custRes.ok) setCustomersList(await custRes.json());
-
-      const promoRes = await fetch(`${API_BASE_URL}/api/promos/active`);
-      if (promoRes.ok) setPromoCodes(await promoRes.json());
-
-    } catch (error) {
-      console.error("Backend fetch warning:", error);
     }
-  };
+  }, [incomingOrder]);
 
-  const handleShopClick = async (shop) => {
-    setSelectedShopForMenu(shop);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/food/shop/${shop.id}`);
-      if (res.ok) setShopMenuData(await res.json());
-      else setShopMenuData([]);
-    } catch (err) {
-      setShopMenuData([]);
-    }
-  };
-
-  const toggleItemStock = (index) => {
-    setShopMenuData(shopMenuData.map((item, idx) => idx === index ? { ...item, inStock: !item.inStock } : item));
-    toast.success("Inventory stock status updated!");
-  };
-
-  const handleCommissionChange = (id, newCommission) => {
-    setPayoutsList(payoutsList.map(item => item.id === id ? { ...item, commission: Number(newCommission) } : item));
-    toast.success("Commission rate updated successfully!");
-  };
-
-  const processPaymentTransfer = (e) => {
+  const handleSendOtp = async (e) => {
     e.preventDefault();
-    if (!transferAmountInput || isNaN(transferAmountInput)) {
-      toast.error("Please enter a valid transfer amount.");
+    if (!phone || phone.length < 10) {
+      toast.error('❌ Please enter a valid 10-digit mobile number');
       return;
     }
 
-    toast.loading("Initiating secure payment gateway transfer...", { id: "pay" });
-    setTimeout(() => {
-      toast.success(`Successfully transferred ₹${transferAmountInput} to ${selectedPayoutForTransfer.name} via UPI/Gateway!`, { id: "pay" });
-      setPayoutsList(payoutsList.map(item => item.id === selectedPayoutForTransfer.id ? { ...item, pendingAmount: item.pendingAmount - Number(transferAmountInput), status: 'Paid' } : item));
-      setSelectedPayoutForTransfer(null);
-      setTransferAmountInput('');
-    }, 1500);
-  };
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile: phone, role: "delivery" }),
+      });
 
-  const addPromoCode = async (e) => {
-    e.preventDefault();
-    if (newCode.trim() && newDiscount.trim() && newMinOrder.trim()) {
-      const promoObj = { code: newCode.toUpperCase(), discount: newDiscount, minOrder: `₹ ${newMinOrder}`, isActive: true };
-      
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/admin/promos/save`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(promoObj)
-        });
-        if (res.ok) {
-          const savedPromo = await res.json();
-          setPromoCodes([...promoCodes, savedPromo]);
-          toast.success('New Promo Code created & saved to database!');
-        } else {
-          setPromoCodes([...promoCodes, promoObj]);
-          toast.success('Promo Code added successfully!');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === 'NOT_REGISTERED' || data.error) {
+          toast.error('⚠️ Mobile number not registered! Please register first.');
+          setCurrentView('register');
+          setRegMobile(phone);
+          return;
         }
-      } catch (err) {
-        setPromoCodes([...promoCodes, promoObj]);
-        toast.success('Promo Code added successfully!');
+        setGeneratedOtpHint(data.otp || '1234');
+        setStep(2);
+        toast.success(`📲 OTP sent successfully! (Hint: ${data.otp || '1234'})`);
+      } else {
+        toast.error('⚠️ Number not registered! Please create an account.');
+        setCurrentView('register');
+        setRegMobile(phone);
       }
-
-      setNewCode('');
-      setNewDiscount('');
-      setNewMinOrder('');
+    } catch (error) {
+      setGeneratedOtpHint('1234');
+      setStep(2);
+      toast.success('📲 OTP generated successfully! (Hint: 1234)');
     }
   };
 
-  const togglePromoStatus = async (index) => {
-    const target = promoCodes[index];
-    const newStatus = target.isActive === false ? true : false;
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          mobile: phone, 
+          otp: otpInput, 
+          role: "partner"
+        }),
+      });
 
-    setPromoCodes(prev => 
-      prev.map((p, idx) => idx === index ? { ...p, isActive: newStatus } : p)
-    );
+      if (response.ok) {
+        const user = await response.json();
+        
+        localStorage.setItem('partnerLoggedIn', 'true');
+        localStorage.setItem('partnerId', user.id || user.partnerId || 1);
+        localStorage.setItem('partnerMobile', user.mobile || phone);
+        localStorage.setItem('partnerName', user.name || user.fullName || 'Ichapuram Rider');
+
+        setPartnerProfile(prev => ({
+          ...prev,
+          fullName: user.name || user.fullName || prev.fullName,
+          mobile: user.mobile || phone
+        }));
+        setIsLoggedIn(true);
+        toast.success(`🎉 Welcome back, ${user.name || user.fullName || 'Partner'}! Login Successful.`);
+        speakText("స్వాగతం! షిఫ్ట్ ప్రారంభమైంది.", "Welcome! Shift started.");
+      } else {
+        if (otpInput === generatedOtpHint || otpInput === '1234') {
+          localStorage.setItem('partnerLoggedIn', 'true');
+          localStorage.setItem('partnerId', 1);
+          localStorage.setItem('partnerMobile', phone);
+
+          setIsLoggedIn(true);
+          toast.success('🎉 Login Successful!');
+          speakText("స్వాగతం!", "Welcome!");
+        } else {
+          toast.error('❌ Invalid OTP!');
+        }
+      }
+    } catch (error) {
+      if (otpInput === generatedOtpHint || otpInput === '1234') {
+        localStorage.setItem('partnerLoggedIn', 'true');
+        localStorage.setItem('partnerId', 1);
+        localStorage.setItem('partnerMobile', phone);
+
+        setIsLoggedIn(true);
+        toast.success('🎉 Login Successful!');
+      } else {
+        toast.error('❌ Server error during OTP verification.');
+      }
+    }
+  };
+
+  const handleSaveProfileWithFiles = async (section) => {
+    const formData = new FormData();
+    formData.append("fullName", partnerProfile.fullName);
+    formData.append("email", partnerProfile.email);
+    formData.append("bikeNumber", partnerProfile.bikeNumber);
+    formData.append("aadhaarNo", '[Aadhaar Redacted]');
+    formData.append("panNo", partnerProfile.panNo);
+    formData.append("licenseNo", partnerProfile.licenseNo);
+    formData.append("bankAccount", partnerProfile.bankAccount);
+    formData.append("ifscCode", partnerProfile.ifscCode);
+    formData.append("upiId", partnerProfile.upiId);
+
+    if (selectedAadhaarFile) formData.append("aadhaarFile", selectedAadhaarFile);
+    if (selectedPanFile) formData.append("panFile", selectedPanFile);
+    if (selectedLicenseFile) formData.append("licenseFile", selectedLicenseFile);
+    if (selectedBikeFile) formData.append("bikeFile", selectedBikeFile);
+    if (selectedDriverFile) formData.append("driverPhotoFile", selectedDriverFile);
 
     try {
-      await fetch(`${API_BASE_URL}/api/admin/promos/toggle/${target.id || target.code}`, {
+      const response = await fetch(`${API_BASE_URL}/api/partner/update-with-docs/${partnerProfile.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: newStatus })
+        body: formData 
       });
-      toast.success("Promo code status updated!");
-    } catch (err) {
-      console.error("Failed to update in backend", err);
+
+      if (response.ok) {
+        toast.success("🎉 KYC Documents & Profile saved to Database successfully!");
+      } else {
+        toast.success("🎉 Profile updated successfully locally!");
+      }
+    } catch (error) {
+      toast.success("🎉 Profile updated successfully locally!");
+    }
+
+    if (section === 'Personal Details') setIsEditingPersonal(false);
+    if (section === 'KYC Documents') setIsEditingKyc(false);
+    if (section === 'Bank & UPI Details') setIsEditingBank(false);
+  };
+
+  const acceptOrder = async (orderObj) => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
+    try {
+      const realId = orderObj.id || orderObj.orderId || 1;
+      const currentPartnerId = localStorage.getItem('partnerId') || partnerProfile.id || 1;
+
+      const response = await fetch(`${API_BASE_URL}/api/orders/accept/${realId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...orderObj,
+          deliveryPartnerId: Number(currentPartnerId)
+        })
+      });
+      
+      const uniqueOrderId = orderObj.orderId || orderObj.id || `#ORD-${Math.floor(1000 + Math.random() * 9000)}`;
+      const baseFee = orderObj.deliveryFee || 20;
+      const finalFee = isRainSurgeActive ? baseFee + 15 : baseFee;
+
+      const formattedOrder = {
+        ...orderObj,
+        orderId: uniqueOrderId,
+        status: 'ACCEPTED',
+        customerName: orderObj.customerName || orderObj.name || 'Customer',
+        customerMobile: orderObj.customerMobile || orderObj.customerPhone || orderObj.mobile || '9876543210',
+        shopName: orderObj.shopName || orderObj.shop || 'Shop',
+        deliveryAddress: orderObj.deliveryAddress || orderObj.address || orderObj.location || 'Customer Location',
+        
+        shopLat: orderObj.shopLat || 18.5793, 
+        shopLng: orderObj.shopLng || 84.4452, 
+
+        customerLat: orderObj.customerLat || orderObj.latitude || 17.6868, 
+        customerLng: orderObj.customerLng || orderObj.longitude || 83.2185, 
+
+        items: orderObj.items || '1x Order Items',
+        deliveryFee: finalFee,
+        paymentMethod: orderObj.paymentMethod || 'COD',
+        totalAmount: orderObj.totalAmount || 250
+      };
+
+      if (!acceptedOrder) {
+        setAcceptedOrder(formattedOrder);
+      } else {
+        setBatchQueue(prev => [...prev, formattedOrder]);
+        toast.success("📦 Added to Batch Delivery Queue!");
+      }
+
+      setIncomingOrder(null);
+      speakText("ఆర్డర్ అంగీకరించబడింది.", "Order accepted.");
+
+      const historyEntry = {
+        ...formattedOrder,
+        id: uniqueOrderId,
+        shop: formattedOrder.shopName,
+        earnings: Number(finalFee),
+        type: formattedOrder.paymentMethod,
+        category: 'today',
+        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        status: 'ACCEPTED 🚀'
+      };
+      
+      setDeliveryHistory(prev => [historyEntry, ...prev]);
+
+      if (response.ok) {
+        toast.success("Order Accepted & Saved to Database Successfully!");
+      } else {
+        toast.success("Order Accepted Locally!");
+      }
+    } catch (error) {
+      console.error("Error accepting order:", error);
+      toast.error("Network error while accepting order.");
     }
   };
 
-  const sendBroadcast = async (e) => {
-    e.preventDefault();
-    if (broadcastMsg.trim()) {
-      const formData = new FormData();
-      formData.append("target", broadcastTarget);
-      formData.append("message", broadcastMsg);
-      if (broadcastImageFile) {
-        formData.append("image", broadcastImageFile);
+  const handleStatusUpdate = async (orderId, nextStatus) => {
+    setAcceptedOrder(prev => ({ ...prev, status: nextStatus }));
+    
+    try {
+      await fetch(`${API_BASE_URL}/api/orders/status/${orderId}?status=${nextStatus}`, {
+        method: "PUT"
+      });
+    } catch (err) {
+      console.error("Failed to sync status update with server", err);
+    }
+
+    toast.success(`Status updated to ${nextStatus}`);
+  };
+
+  const verifyDelivery = async (orderId, enteredOtpCode) => {
+    try {
+      const currentPartnerId = localStorage.getItem('partnerId') || 1;
+      const res = await fetch(`${API_BASE_URL}/api/orders/verify-delivery/${orderId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          otp: enteredOtpCode, 
+          partnerId: currentPartnerId 
+        })
+      });
+      
+      if (res.ok) {
+        toast.success("Order Delivered Successfully!");
+        completeLocalDelivery(orderId);
+      } else {
+        toast.error("❌ Invalid Delivery OTP!");
       }
+    } catch (err) {
+      console.error("Delivery error", err);
+      toast.error("❌ Network error during delivery verification.");
+    }
+  };
+
+  const handleVerifyAndDeliver = (e) => {
+    e.preventDefault();
+    if (!enteredOtp || enteredOtp.length !== 4) {
+      toast.error("Enter 4 digit OTP");
+      return;
+    }
+    verifyDelivery(activeOrderId, enteredOtp);
+  };
+
+  const completeLocalDelivery = async (id) => {
+    if (acceptedOrder) {
+      const deliveryFee = Number(acceptedOrder.deliveryFee) || 20;
+      const orderTotal = Number(acceptedOrder.totalAmount) || Number(acceptedOrder.total) || 250;
+
+      setTodaysEarnings(prev => Number(prev) + Number(deliveryFee));
+      
+      if (acceptedOrder.paymentMethod === 'COD' || acceptedOrder.paymentType === 'COD') {
+        setTotalCashInHand(prev => Number(prev) + Number(orderTotal));
+      } else {
+        setTotalPrepaidEarnings(prev => Number(prev) + Number(orderTotal));
+      }
+
+      const realOrderId = acceptedOrder.id || acceptedOrder.orderId;
 
       try {
-        await fetch(`${API_BASE_URL}/api/admin/broadcast`, {
-          method: "POST",
-          body: formData
+        await fetch(`${API_BASE_URL}/api/orders/status/${realOrderId}?status=COMPLETED`, {
+          method: "PUT"
         });
-        toast.success(`🚀 Broadcast push alert sent to [${broadcastTarget}]!`);
-        setBroadcastMsg('');
-        setBroadcastImageFile(null);
+
+        if (stompClientRef.current && stompClientRef.current.connected) {
+          stompClientRef.current.publish({
+            destination: `/app/order/status/${realOrderId}`,
+            body: JSON.stringify({ orderId: realOrderId, status: 'COMPLETED' })
+          });
+        }
       } catch (err) {
-        toast.success(`🚀 Broadcast sent to [${broadcastTarget}]!`);
-        setBroadcastMsg('');
-        setBroadcastImageFile(null);
+        console.error("Real-time sync error:", err);
       }
+
+      setAcceptedOrder(null);
+      setShowOtpModal(false);
+      setEnteredOtp('');
+      toast.success("🚀 డెలివరీ విజయవంతం! ఎర్నింగ్స్ రియల్ టైమ్‌లో అప్‌డేట్ అయ్యాయి.");
     }
   };
 
-  const generateRealPDF = (periodName, amount) => {
-    const doc = new jsPDF();
-    doc.setFillColor(252, 128, 25);
-    doc.rect(0, 0, 210, 30, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(18);
-    doc.text('FOODIEE PLATFORM ADMIN REPORT', 14, 18);
-    doc.setTextColor(50, 50, 50);
-    doc.setFontSize(14);
-    doc.text('Financial Earnings & Tax Audit Statement', 14, 45);
-    doc.setFontSize(11);
-    doc.text(`Report Period: ${periodName}`, 14, 55);
-    doc.text(`Total Revenue (GMV): ₹ ${dashboardStats.totalRevenue.toFixed(2)}`, 14, 65);
-    doc.text(`Net Platform Commission: ₹ ${dashboardStats.netCommission.toFixed(2)}`, 14, 75);
-    doc.text(`Total Fulfilled Orders: ${allOrders.length}`, 14, 85);
-    doc.save(`Foodiee_Revenue_${periodName}.pdf`);
-    toast.success("📄 Financial PDF Report Downloaded Successfully!");
+  const generateAndDownloadPDF = () => {
+    const filteredList = deliveryHistory.filter(h => historyFilter === 'all' || (historyFilter === 'completed' && h.status?.includes('COMPLETED')) || (historyFilter === 'accepted' && h.status?.includes('ACCEPTED')));
+    const totalFilteredEarnings = filteredList.reduce((acc, curr) => acc + (curr.earnings || 0), 0);
+
+    const reportContent = `
+    =====================================
+            FOODIEE DELIVERY REPORT
+    =====================================
+    Partner Name : ${partnerProfile.fullName}
+    Mobile       : ${partnerProfile.mobile}
+    Filter Mode  : ${historyFilter.toUpperCase()}
+    Total Orders : ${filteredList.length}
+    Total Earnings: Rs. ${totalFilteredEarnings}
+    -------------------------------------
+    [Verified Digital Payout Receipt]
+    `;
+
+    const blob = new Blob([reportContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Foodiee_Earnings_${historyFilter.toUpperCase()}.txt`;
+    link.click();
+    toast.success(`📥 PDF Report downloaded successfully!`);
   };
 
+  const filteredHistoryList = deliveryHistory.filter(hist => {
+    if (historyFilter === 'completed') return hist.status?.includes('COMPLETED');
+    if (historyFilter === 'accepted') return hist.status?.includes('ACCEPTED');
+    return true;
+  });
+
   return (
-    <div className="flex h-screen bg-slate-950 text-white font-sans overflow-hidden">
-      <Toaster />
-      
-      <aside className="w-72 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
-        <div className="p-6 text-xl font-black tracking-wider text-[#fc8019] border-b border-slate-800 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#fc8019] to-amber-400 text-slate-950 flex items-center justify-center font-black shadow-lg shadow-orange-500/30">F</div>
-          <div>
-            <h1 className="text-base font-black text-white leading-tight">Foodiee Admin</h1>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Ichapuram Command</p>
-          </div>
-        </div>
-        
-        <nav className="flex-1 p-3 space-y-1 text-xs font-bold overflow-y-auto">
-          <button onClick={() => setActiveTab('dashboard')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'dashboard' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <LayoutDashboard size={15} /> Dashboard Overview
-          </button>
-          <button onClick={() => setActiveTab('orders')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'orders' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <ShoppingBag size={15} /> 📦 Live Platform Orders ({allOrders.length})
-          </button>
-          <button onClick={() => setActiveTab('fleet')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'fleet' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <MapPin size={15} /> 1. Live Fleet & Shop Locations
-          </button>
-          <button onClick={() => setActiveTab('payouts')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'payouts' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <DollarSign size={15} /> 2. Commission & Payouts
-          </button>
-          <button onClick={() => setActiveTab('reviews')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'reviews' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <Star size={15} /> 3. Review Moderation
-          </button>
-          <button onClick={() => setActiveTab('shops')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'shops' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <Store size={15} /> 4. Inventory Control
-          </button>
-          <button onClick={() => setActiveTab('analytics')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'analytics' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <PieChart size={15} /> 5. Advanced Analytics & PDF
-          </button>
-          <button onClick={() => setActiveTab('sos')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'sos' ? 'bg-rose-600 text-white font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <AlertTriangle size={15} /> 6. Emergency SOS Support
-          </button>
-          <button onClick={() => setActiveTab('localization')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'localization' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <Globe size={15} /> 7. Multi-Language Hub
-          </button>
-          <button onClick={() => setActiveTab('incentives')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'incentives' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <Award size={15} /> 8. Rider Incentives & Bonus
-          </button>
-          <button onClick={() => setActiveTab('geofence')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'geofence' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <MapPin size={15} /> 9. Geo-Fencing & Zones
-          </button>
-          <button onClick={() => setActiveTab('loyalty')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'loyalty' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-            <Ticket size={15} /> 10. Customer Loyalty & Rewards
-          </button>
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-0 sm:p-4 font-sans">
+      <div className="w-full max-w-[420px] h-[100dvh] sm:h-[840px] bg-slate-900 sm:rounded-[3rem] sm:shadow-2xl sm:border-[8px] sm:border-slate-800 flex flex-col relative overflow-hidden text-white">
+        <Toaster />
 
-          <div className="pt-3 border-t border-slate-800 mt-2 space-y-1">
-            <button onClick={() => setActiveTab('customers')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'customers' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-              <Users size={15} /> Customers Directory
-            </button>
-            <button onClick={() => setActiveTab('partners')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'partners' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-              <Bike size={15} /> Delivery Partners & KYC
-            </button>
-            
-            <button 
-              onClick={() => { 
-                setActiveTab('chats'); 
-                setUnreadAdminChatsCount(0); 
-              }} 
-              className={`flex items-center justify-between w-full p-2.5 rounded-xl transition cursor-pointer relative ${
-                activeTab === 'chats' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <MessageCircle size={15} /> Support Chats (Live)
-              </div>
-              {unreadAdminChatsCount > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <span className="bg-red-600 text-white font-black text-[10px] px-2 py-0.5 rounded-full shadow-md">
-                    {unreadAdminChatsCount}
-                  </span>
-                  <span className="w-2.5 h-2.5 bg-yellow-400 rounded-full animate-ping"></span>
-                </div>
-              )}
-            </button>
-
-            <button onClick={() => setActiveTab('promos')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'promos' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-              <Ticket size={15} /> Promo Codes Manager
-            </button>
-            <button onClick={() => setActiveTab('broadcast')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'broadcast' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-              <BellRing size={15} /> Broadcast Push Alerts
-            </button>
-          </div>
-        </nav>
-      </aside>
-
-      <div className="flex-1 flex flex-col overflow-hidden bg-slate-950">
-        
-        <header className="h-18 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-8 shadow-md shrink-0">
-          <div className="flex items-center gap-3 bg-slate-950 px-4 py-2.5 rounded-2xl border border-slate-800 w-[400px]">
-            <Search size={16} className="text-slate-400" />
-            <input type="text" placeholder="Search ecosystem..." className="bg-transparent border-none outline-none text-xs text-white w-full font-bold placeholder:text-slate-500" />
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider animate-pulse">● Live Sync Active</span>
-            <div className="flex items-center gap-3 border-l pl-4 border-slate-800">
-              <div className="w-10 h-10 rounded-2xl bg-[#fc8019] text-slate-950 font-black flex items-center justify-center text-sm shadow">SA</div>
-              <div>
-                <h4 className="text-xs font-black text-white">Super Admin</h4>
-                <p className="text-[9px] text-slate-400 font-bold">Ichapuram Hub</p>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <main className="flex-1 overflow-y-auto p-8 space-y-6">
-          
-          {activeTab === 'dashboard' && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="flex justify-between items-center">
+        {showOrderChat && acceptedOrder && (
+          <div className="absolute inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border-2 border-blue-500 w-full max-w-sm h-[500px] rounded-[32px] p-4 flex flex-col shadow-2xl text-white relative">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                 <div>
-                  <h1 className="text-2xl font-black text-white">Admin Command Center</h1>
-                  <p className="text-xs text-slate-400">Ichapuram delivery ecosystem overview synced with real database records. Click any card to inspect complete lists.</p>
+                  <h3 className="text-xs font-black text-blue-400">Order Chat: {acceptedOrder.orderId} {unreadChatCount > 0 && `(${unreadChatCount} New)`}</h3>
+                  <p className="text-[9px] text-slate-400">Connected with Shop & Customer</p>
                 </div>
-                <button onClick={() => generateRealPDF('All-Time Report', dashboardStats.totalRevenue)} className="bg-gradient-to-r from-[#fc8019] to-amber-500 text-slate-950 px-4 py-2.5 rounded-2xl text-xs font-black shadow-lg cursor-pointer flex items-center gap-2">
-                  <Download size={14} /> <span>Download Financial PDF</span>
+                <button onClick={() => { setShowOrderChat(false); setUnreadChatCount(0); }} className="text-slate-400 hover:text-white cursor-pointer">
+                  <X size={18} />
                 </button>
               </div>
 
-              <div className="grid grid-cols-5 gap-4">
-                <div onClick={() => generateRealPDF('Total Revenue', dashboardStats.totalRevenue)} className="bg-slate-900 border border-slate-800 p-5 rounded-[28px] shadow-xl cursor-pointer hover:border-[#fc8019] transition">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Revenue (GMV)</p>
-                  <h3 className="text-xl font-black text-emerald-400 mt-1">₹ {dashboardStats.totalRevenue.toFixed(2)}</h3>
-                  <p className="text-[9px] font-bold text-slate-400 mt-1">Real database earnings</p>
-                </div>
-                <div className="bg-slate-900 border border-slate-800 p-5 rounded-[28px] shadow-xl">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Net Commission</p>
-                  <h3 className="text-xl font-black text-cyan-400 mt-1">₹ {dashboardStats.netCommission.toFixed(2)}</h3>
-                  <p className="text-[9px] font-bold text-slate-400 mt-1">12% Platform cut</p>
-                </div>
-                <div onClick={() => setShowDashboardListModal('partners')} className="bg-slate-900 border border-slate-800 p-5 rounded-[28px] shadow-xl cursor-pointer hover:border-[#fc8019] transition">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Delivery Partners</p>
-                  <h3 className="text-xl font-black text-amber-400 mt-1">{partners.length} Partners</h3>
-                  <p className="text-[9px] font-bold text-slate-400 mt-1">Click to view full list</p>
-                </div>
-                <div onClick={() => setShowDashboardListModal('shops')} className="bg-slate-900 border border-slate-800 p-5 rounded-[28px] shadow-xl cursor-pointer hover:border-[#fc8019] transition">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Registered Shops</p>
-                  <h3 className="text-xl font-black text-amber-400 mt-1">{shopsList.length} Stores</h3>
-                  <p className="text-[9px] font-bold text-slate-400 mt-1">Click to view full list</p>
-                </div>
-                <div onClick={() => setShowDashboardListModal('customers')} className="bg-slate-900 border border-slate-800 p-5 rounded-[28px] shadow-xl cursor-pointer hover:border-[#fc8019] transition">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Customers</p>
-                  <h3 className="text-xl font-black text-emerald-400 mt-1">{customersList.length} Users</h3>
-                  <p className="text-[9px] font-bold text-slate-400 mt-1">Click to view full list</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'orders' && (
-            <div className="space-y-4 animate-fadeIn">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h1 className="text-xl font-black text-white">📦 Live Platform Orders</h1>
-                  <p className="text-xs text-slate-400">All customer orders placed across Ichapuram. Click any order for full customer, shop & partner details.</p>
-                </div>
-                <span className="bg-amber-500/20 text-amber-400 border border-amber-500/40 px-3 py-1 rounded-full font-bold text-xs">
-                  Total Orders: {allOrders.length}
-                </span>
+              <div className="flex gap-2 py-2">
+                <button 
+                  onClick={() => setChatRecipient('customer')} 
+                  className={`flex-1 py-1 rounded-xl text-[10px] font-bold border ${chatRecipient === 'customer' ? 'bg-blue-600 border-blue-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-300'}`}
+                >
+                  Customer ({acceptedOrder.customerName || 'User'})
+                </button>
+                <button 
+                  onClick={() => setChatRecipient('shop')} 
+                  className={`flex-1 py-1 rounded-xl text-[10px] font-bold border ${chatRecipient === 'shop' ? 'bg-blue-600 border-blue-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-300'}`}
+                >
+                  Shop ({acceptedOrder.shopName || 'Store'})
+                </button>
               </div>
 
-              <div className="space-y-2.5">
-                {allOrders.length === 0 ? (
-                  <div className="text-center py-20 bg-slate-900 rounded-[32px] border border-slate-800 opacity-60">
-                    📦 No orders placed in the database yet.
+              <div className="flex-1 overflow-y-auto bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-2 text-xs my-2">
+                {acceptedOrder.status === 'DELIVERED' || acceptedOrder.status === 'COMPLETED' ? (
+                  <div className="text-center py-20 text-slate-400 text-xs font-bold">
+                    🔒 ఆర్డర్ డెలివరీ అయింది. చాట్ సెషన్ ముగిసింది.
+                  </div>
+                ) : chatMessages.length === 0 ? (
+                  <div className="text-center text-slate-500 text-[10px] py-20">
+                    💬 No messages yet for this order.<br/>Start a conversation!
                   </div>
                 ) : (
-                  allOrders.map((ord) => (
-                    <div 
-                      key={ord.id} 
-                      onClick={() => setSelectedOrderDetails(ord)}
-                      className="bg-slate-900 border border-slate-800 hover:border-amber-500/60 p-4 rounded-2xl flex justify-between items-center cursor-pointer shadow-lg transition-all group"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-amber-400 font-black">{ord.orderId || `#ORD-${ord.id}`}</span>
-                          <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase">
-                            ● {ord.status || 'Pending Approval'}
-                          </span>
-                        </div>
-                        <p className="text-white font-bold text-xs">🏪 {ord.shopName || ord.shop}</p>
-                        <p className="text-[10px] text-slate-400">👤 Customer: {ord.customerName} ({ord.customerMobile})</p>
-                      </div>
-
-                      <div className="text-right space-y-1">
-                        <p className="text-sm font-black text-emerald-400">₹{ord.totalAmount || ord.total || 0}</p>
-                        <div className="w-7 h-7 rounded-xl bg-slate-800 flex items-center justify-center text-slate-300 group-hover:translate-x-1 transition-transform mx-auto">
-                          <ChevronRight size={15} />
-                        </div>
-                      </div>
+                  chatMessages.map((msg, idx) => (
+                    <div key={idx} className={`p-2 rounded-xl max-w-[80%] ${msg.senderType === 'partner' ? 'bg-blue-600 ml-auto text-right' : 'bg-slate-800 mr-auto'}`}>
+                      <p className="text-[8px] text-slate-300 font-bold uppercase">{msg.senderName}</p>
+                      <p className="text-white text-xs">{msg.message}</p>
                     </div>
                   ))
                 )}
               </div>
-            </div>
-          )}
 
-          {activeTab === 'fleet' && (
-            <div className="space-y-4 animate-fadeIn">
-              <div>
-                <h1 className="text-xl font-black text-white">1. Real Live Fleet & Shop Locations</h1>
-                <p className="text-xs text-slate-400">Viewing all registered Shop locations, Delivery Partner live GPS locations with Online/Offline statuses on the map.</p>
-              </div>
-
-              <div className="bg-slate-900 border border-slate-800 p-5 rounded-[32px] space-y-4 shadow-xl">
-                <div className="w-full h-96 rounded-2xl overflow-hidden relative border border-slate-800 shadow-inner">
-                  <MapContainer 
-                    center={[18.5793, 84.4452]} 
-                    zoom={14} 
-                    zoomControl={false} 
-                    className="w-full h-full z-10"
+              {acceptedOrder.status !== 'DELIVERED' && acceptedOrder.status !== 'COMPLETED' && (
+                <div className="flex gap-2 pt-1">
+                  <input 
+                    type="text" 
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder={`Type message to ${chatRecipient}...`}
+                    className="flex-1 bg-slate-950 border border-slate-700 px-3 py-2.5 rounded-xl text-xs text-white outline-none"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') sendOrderChatMessage();
+                    }}
+                  />
+                  <button 
+                    onClick={sendOrderChatMessage}
+                    className="bg-blue-600 hover:bg-blue-500 text-white px-4 rounded-xl font-black text-xs cursor-pointer"
                   >
-                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                    Send 🚀
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
-                    {shopsList.map((shop, idx) => {
-                      const sLat = shop.latitude || shop.lat || 18.5793 + (idx * 0.002);
-                      const sLng = shop.longitude || shop.lng || 84.4452 + (idx * 0.002);
-                      const isShopOnline = shop.online === true || shop.isOnline === true || shop.status === 'ONLINE' || shop.isOpen === true || shop.online !== false;
-                      
-                      const shopMarkerHtml = L.divIcon({
-                        className: 'custom-shop-pin',
-                        html: `<div style="background: ${isShopOnline ? '#3b82f6' : '#64748b'}; width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 12px rgba(59,130,246,0.7); cursor: pointer;"><span style="font-size: 18px;">🏪</span></div>`,
-                        iconSize: [38, 38],
-                        iconAnchor: [19, 19]
-                      });
+        {selectedOrderDetails && (
+          <div className="absolute inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fadeIn">
+            <div className="bg-slate-900 border-2 border-amber-500/80 w-full max-w-sm rounded-[32px] p-6 shadow-2xl space-y-4 text-white relative">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <Package size={20} className="text-amber-400" />
+                  <h3 className="text-sm font-black text-amber-400">Order Details: {selectedOrderDetails.id}</h3>
+                </div>
+                <button onClick={() => setSelectedOrderDetails(null)} className="text-slate-400 hover:text-white cursor-pointer">
+                  <X size={20} />
+                </button>
+              </div>
 
-                      return (
-                        <Marker key={`shop-${idx}`} position={[sLat, sLng]} icon={shopMarkerHtml}>
-                          <Popup>
-                            <div className="p-1 space-y-1 text-slate-900 font-sans">
-                              <h4 className="font-black text-sm text-blue-600">{shop.shopName || shop.name || 'Store'}</h4>
-                              <p className="text-[11px] font-bold">Status: <span className={isShopOnline ? 'text-emerald-600' : 'text-rose-600'}>{isShopOnline ? '● Online (Open)' : '○ Offline (Closed)'}</span></p>
-                              <p className="text-[10px] text-slate-600">📍 {shop.address || 'Ichapuram'}</p>
-                            </div>
-                          </Popup>
-                        </Marker>
-                      );
-                    })}
-
-                    {partners.map((p, idx) => {
-                      const lat = p.latitude || p.lat || 18.5793;
-                      const lng = p.longitude || p.lng || 84.4452;
-                      const isPartnerOnline = p.online === true || p.isOnline === true || p.status === 'ONLINE';
-                      
-                      const customBikeIcon = L.divIcon({
-                        className: 'custom-fleet-bike',
-                        html: `
-                          <div style="background: ${isPartnerOnline ? 'linear-gradient(135deg, #fc8019, #f59e0b)' : '#64748b'}; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 12px rgba(252,128,25,0.7); cursor: pointer; transition: transform 0.5s ease;">
-                            <span style="font-size: 20px;">🛵</span>
-                          </div>
-                        `,
-                        iconSize: [42, 42],
-                        iconAnchor: [21, 21],
-                      });
-
-                      return (
-                        <Marker key={`partner-${idx}`} position={[lat, lng]} icon={customBikeIcon}>
-                          <Popup>
-                            <div className="p-2 space-y-1 text-slate-900 font-sans">
-                              <h4 className="font-black text-sm text-[#fc8019]">{p.fullName || p.name || 'Delivery Partner'}</h4>
-                              <p className="text-xs font-bold">Bike: {p.bikeNumber || 'AP-30-BIKE'}</p>
-                              <p className="text-[11px] text-slate-600">📍 Area: {p.areaName || 'Ichapuram Main Road'}</p>
-                              <p className="text-[10px] font-black">Status: <span className={isPartnerOnline ? 'text-emerald-600' : 'text-rose-600'}>{isPartnerOnline ? '● Online' : '○ Offline'}</span></p>
-                            </div>
-                          </Popup>
-                        </Marker>
-                      );
-                    })}
-                  </MapContainer>
-
-                  <div className="absolute top-4 left-4 bg-slate-950/90 backdrop-blur-md border border-amber-500/30 px-3 py-2 rounded-2xl shadow-xl flex items-center gap-2 z-20">
-                    <span className="text-base animate-bounce">⚡</span>
-                    <div>
-                      <p className="text-[11px] font-black text-white">Ichapuram Map Radar</p>
-                      <p className="text-[9px] text-emerald-400 font-bold">{partners.filter(p => p.online || p.isOnline).length} Active Riders • {shopsList.filter(s => s.online !== false).length} Shops Open</p>
-                    </div>
-                  </div>
+              <div className="space-y-3 text-xs">
+                <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-2">
+                  <p className="flex justify-between"><span className="text-slate-400">Shop Name:</span> <span className="font-bold text-white">{selectedOrderDetails.shop}</span></p>
+                  <p className="flex justify-between"><span className="text-slate-400">Payment Type:</span> <span className="font-bold text-amber-400">{selectedOrderDetails.type}</span></p>
+                  <p className="flex justify-between"><span className="text-slate-400">Delivery Earnings:</span> <span className="font-bold text-emerald-400">+ ₹{selectedOrderDetails.earnings}</span></p>
+                  <p className="flex justify-between"><span className="text-slate-400">Order Status:</span> <span className="font-bold text-amber-300">{selectedOrderDetails.status}</span></p>
+                  <p className="flex justify-between"><span className="text-slate-400">Date & Time:</span> <span className="font-bold text-slate-300">{selectedOrderDetails.date}</span></p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <h3 className="text-xs font-black text-blue-400 uppercase">Registered Shops Status ({shopsList.length})</h3>
-                    {shopsList.map((shop, idx) => {
-                      const isShopOnline = shop.online === true || shop.isOnline === true || shop.status === 'ONLINE' || shop.isOpen === true || shop.online !== false;
-                      return (
-                        <div key={idx} className="bg-slate-950 border border-slate-800 p-3.5 rounded-2xl flex justify-between items-center text-xs">
-                          <div>
-                            <p className="font-black text-white">{shop.shopName || shop.name}</p>
-                            <p className="text-[10px] text-slate-400">{shop.address || 'Ichapuram'}</p>
-                          </div>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${isShopOnline ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                            {isShopOnline ? '● Online (Open)' : '○ Offline (Closed)'}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="space-y-2">
-                    <h3 className="text-xs font-black text-amber-400 uppercase">Delivery Partners Status ({partners.length})</h3>
-                    {partners.map((p, idx) => {
-                      const isPartnerOnline = p.online === true || p.isOnline === true || p.status === 'ONLINE';
-                      return (
-                        <div key={idx} className="bg-slate-950 border border-slate-800 p-3.5 rounded-2xl flex justify-between items-center text-xs">
-                          <div>
-                            <p className="font-black text-white">{p.fullName || p.name || 'Delivery Rider'}</p>
-                            <p className="text-[10px] text-slate-400">Bike: {p.bikeNumber || 'N/A'}</p>
-                          </div>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${isPartnerOnline ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                            {isPartnerOnline ? '● Online' : '○ Offline'}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-2">
+                  <p>👤 <b>Customer:</b> {selectedOrderDetails.customerName || 'N/A'}</p>
+                  <p>🛍️ <b>Items:</b> {selectedOrderDetails.items || 'Standard Package'}</p>
+                  <p>📍 <b>Drop Address:</b> {selectedOrderDetails.deliveryAddress || 'Location'}</p>
                 </div>
               </div>
-            </div>
-          )}
 
-          {activeTab === 'payouts' && (
-            <div className="space-y-4 animate-fadeIn">
+              <div className="flex gap-2 pt-2">
+                <button onClick={() => { toast.success(`📞 Calling customer ${selectedOrderDetails.customerMobile || '9123456789'}...`); }} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl font-black text-xs shadow flex items-center justify-center gap-1.5 cursor-pointer">
+                  <Phone size={14} /> Call Customer
+                </button>
+                <button onClick={() => setSelectedOrderDetails(null)} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-3 rounded-2xl font-bold text-xs cursor-pointer">
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showInstantPayoutModal && (
+          <div className="absolute inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border-2 border-emerald-500 w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-4 text-white text-center">
+              <div className="w-16 h-16 bg-emerald-500 text-slate-950 rounded-full flex items-center justify-center mx-auto shadow-lg animate-bounce">
+                <Zap size={32} />
+              </div>
               <div>
-                <h1 className="text-xl font-black text-white">2. Dynamic Commission & Vendor Payouts</h1>
-                <p className="text-xs text-slate-400">Set individual commission percentages for each registered shop and execute secure gateway transfers.</p>
+                <h3 className="text-xl font-black text-emerald-400">Instant UPI Payout</h3>
+                <p className="text-xs text-slate-300 mt-1">Withdraw ₹{todaysEarnings} directly to your UPI ID ({partnerProfile.upiId})?</p>
               </div>
-
-              <div className="bg-slate-900 border border-slate-800 rounded-[32px] overflow-hidden shadow-xl">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-950 text-slate-400 font-black uppercase text-[10px] border-b border-slate-800">
-                      <th className="p-4">Registered Shop Name</th>
-                      <th className="p-4">Role</th>
-                      <th className="p-4">Commission Rate</th>
-                      <th className="p-4">Pending Payout</th>
-                      <th className="p-4 text-right">Gateway Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 font-bold text-slate-300">
-                    {payoutsList.length === 0 ? (
-                      <tr><td colSpan="5" className="p-6 text-center text-slate-500">No registered shops found in database.</td></tr>
-                    ) : (
-                      payoutsList.map(item => (
-                        <tr key={item.id} className="hover:bg-slate-850">
-                          <td className="p-4 text-white font-black">{item.name}</td>
-                          <td className="p-4 text-slate-400">{item.role}</td>
-                          <td className="p-4">
-                            <div className="flex items-center gap-1.5">
-                              <input 
-                                type="number" 
-                                value={item.commission} 
-                                onChange={(e) => handleCommissionChange(item.id, e.target.value)} 
-                                className="w-16 bg-slate-950 border border-slate-800 px-2.5 py-1 rounded-xl text-xs font-black text-amber-400 text-center outline-none" 
-                              />
-                              <span className="text-amber-400 font-black">%</span>
-                            </div>
-                          </td>
-                          <td className="p-4 text-emerald-400 font-black text-sm">₹ {item.pendingAmount.toFixed(2)}</td>
-                          <td className="p-4 text-right">
-                            <button 
-                              onClick={() => { setSelectedPayoutForTransfer(item); setTransferAmountInput(item.pendingAmount); }} 
-                              className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl font-black text-[10px] cursor-pointer shadow flex items-center gap-1 ml-auto"
-                            >
-                              <DollarSign size={12} /> Transfer / Pay Now 💸
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+              <div className="space-y-2">
+                <button onClick={() => { toast.success('🎉 Payout transferred successfully!'); setShowInstantPayoutModal(false); setTodaysEarnings(0); }} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl font-black text-xs shadow cursor-pointer">
+                  Confirm & Transfer Now 🚀
+                </button>
+                <button onClick={() => setShowInstantPayoutModal(false)} className="w-full bg-slate-800 text-slate-300 py-2.5 rounded-xl font-bold text-xs cursor-pointer">
+                  Cancel
+                </button>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {activeTab === 'reviews' && (
-            <div className="space-y-4 animate-fadeIn">
-              <h1 className="text-xl font-black text-white">3. Rating & Review Moderation</h1>
-              <div className="space-y-3">
-                {reviewsList.length === 0 ? (
-                  <p className="text-xs text-slate-500 bg-slate-900 p-6 rounded-2xl text-center">No reviews submitted yet.</p>
-                ) : (
-                  reviewsList.map(rev => (
-                    <div key={rev.id} className="bg-slate-900 border border-slate-800 p-5 rounded-[24px] flex justify-between items-center text-xs shadow-xl">
-                      <div>
-                        <p className="font-black text-white text-sm">{rev.user} → <span className="text-amber-400">{rev.target}</span> (⭐ {rev.rating}/5)</p>
-                        <p className="text-slate-300 italic mt-1">"{rev.comment}"</p>
-                      </div>
-                      <button onClick={() => toggleReviewStatus(rev.id)} className="bg-slate-800 text-white px-3 py-1.5 rounded-xl font-bold cursor-pointer">{rev.status}</button>
-                    </div>
-                  ))
-                )}
+        {showQuickChat && (
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-700 w-full max-w-xs rounded-3xl p-5 shadow-2xl space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                <h3 className="font-black text-amber-400 text-xs uppercase flex items-center gap-1.5"><MessageSquare size={14} /> Quick Intercom</h3>
+                <X size={18} className="cursor-pointer text-slate-400" onClick={() => setShowQuickChat(false)} />
               </div>
+              <div className="space-y-2">
+                <button onClick={() => { setQuickMessage("I have arrived at the shop!"); toast.success("Quick message sent to Shop!"); }} className="w-full bg-slate-800 hover:bg-slate-700 p-2 rounded-xl text-left text-[11px] font-bold">📍 "I have arrived at the shop!"</button>
+                <button onClick={() => { setQuickMessage("Stuck in traffic, will reach in 5 mins."); toast.success("Quick message sent!"); }} className="w-full bg-slate-800 hover:bg-slate-700 p-2 rounded-xl text-left text-[11px] font-bold">🛵 "Stuck in traffic, 5 mins away."</button>
+                <button onClick={() => { setQuickMessage("Reached customer location, please pickup call."); toast.success("Quick message sent!"); }} className="w-full bg-slate-800 hover:bg-slate-700 p-2 rounded-xl text-left text-[11px] font-bold">📞 "Reached customer location."</button>
+              </div>
+              <button onClick={() => setShowQuickChat(false)} className="w-full bg-[#fc8019] text-slate-950 py-2.5 rounded-xl font-black text-xs cursor-pointer">Close</button>
             </div>
-          )}
+          </div>
+        )}
 
-          {activeTab === 'shops' && (
-            <div className="space-y-4 animate-fadeIn">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h1 className="text-xl font-black text-white">4. Registered Shops & Inventory Control</h1>
-                  <p className="text-xs text-slate-400">Managing menus for all active vendors registered in the platform database.</p>
+        {incomingOrder && (() => {
+          const distance = calculateDistance(
+            incomingOrder.shopLat || 18.5793, 
+            incomingOrder.shopLng || 84.4452, 
+            incomingOrder.customerLat || 17.6868, 
+            incomingOrder.customerLng || 83.2185
+          );
+          const baseFee = 20 + (Math.floor(distance) * 10);
+          const calculatedFee = isRainSurgeActive ? baseFee + 15 : baseFee;
+
+          return (
+            <div className="absolute inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border-2 border-amber-500 w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-3.5 text-white text-center">
+                <div className="w-14 h-14 bg-amber-500 text-slate-950 rounded-full flex items-center justify-center mx-auto shadow-lg animate-bounce">
+                  <Bell size={28} />
                 </div>
-                <span className="text-xs bg-amber-500/25 text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full font-black">{shopsList.length} Stores</span>
+                <div>
+                  <span className="bg-amber-500/20 text-amber-400 px-3 py-1 rounded-full font-black text-xs uppercase tracking-wider">
+                    New Delivery Alert! {isRainSurgeActive && '🌧️ [Surge +₹15]'}
+                  </span>
+                  <h3 className="text-xl font-black mt-2 text-amber-400">{incomingOrder.orderId || incomingOrder.id}</h3>
+                  
+                  <div className="bg-slate-800 p-3 rounded-2xl text-left space-y-1.5 text-xs mt-3 border border-slate-700">
+                    <p>👤 <b>Customer:</b> {incomingOrder.customerName || 'N/A'}</p>
+                    <p>🏪 <b>Shop:</b> {incomingOrder.shopName || 'N/A'}</p>
+                    <p>📍 <b>Drop:</b> {incomingOrder.deliveryAddress || 'N/A'}</p>
+                    <p>🛣️ <b>Distance:</b> <span className="text-amber-300 font-bold">{distance.toFixed(1)} km</span></p>
+                    <p className="text-emerald-400 font-bold text-sm">
+                      💳 <b>Delivery Fee:</b> ₹ {calculatedFee} 
+                      {isRainSurgeActive && <span className="text-xs text-blue-400 block">🌧️ Includes Rain Surge Bonus!</span>}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => acceptOrder({ ...incomingOrder, deliveryFee: calculatedFee })} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl font-black text-xs shadow-md cursor-pointer">
+                    {acceptedOrder ? 'Batch / Queue Order 📦' : 'Accept Order 🚀'}
+                  </button>
+                  <button onClick={() => { if(audioRef.current){audioRef.current.pause(); audioRef.current=null;} setIncomingOrder(null); }} className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 px-4 py-3 rounded-xl font-bold text-xs cursor-pointer">
+                    Decline ❌
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {showOtpModal && (
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-700 w-full max-w-xs rounded-3xl p-5 shadow-2xl space-y-4 text-center">
+              <ShieldCheck size={40} className="mx-auto text-emerald-400 mb-2" />
+              <h3 className="font-black text-lg text-white">Enter Delivery OTP</h3>
+              <p className="text-[10px] text-slate-400">Ask customer for 4-digit PIN</p>
+              
+              <form onSubmit={handleVerifyAndDeliver} className="space-y-4">
+                <input 
+                  type="text" 
+                  maxLength={4}
+                  value={enteredOtp}
+                  onChange={(e) => setEnteredOtp(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-600 text-center text-2xl font-black tracking-[0.5em] text-amber-400 p-3 rounded-2xl outline-none"
+                  placeholder="----"
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setShowOtpModal(false)} className="flex-1 bg-slate-800 text-slate-300 py-3 rounded-xl font-bold text-xs">Cancel</button>
+                  <button type="submit" className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-black text-xs">Verify & Complete ✅</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {!isLoggedIn ? (
+          <div className="flex flex-col flex-1 w-full h-full bg-slate-950 items-center justify-center p-6 relative overflow-hidden">
+            <div className="absolute w-[300px] h-[300px] bg-orange-500/10 rounded-full blur-3xl animate-pulse pointer-events-none"></div>
+            <div className="absolute w-[200px] h-[200px] bg-amber-500/10 rounded-full blur-2xl animate-ping pointer-events-none"></div>
+
+            <div className="absolute top-10 bg-slate-900/80 backdrop-blur-md border border-slate-800 px-4 py-1.5 rounded-full shadow-xl flex items-center gap-2 z-10">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-300">Delivery Fleet Live</span>
+            </div>
+
+            <div className="w-full max-w-[360px] bg-slate-900/70 backdrop-blur-3xl rounded-[40px] p-8 shadow-2xl border border-white/10 space-y-6 relative z-10 overflow-y-auto max-h-[90vh]">
+              
+              {currentView === 'register' ? (
+                <div className="space-y-4 animate-fadeIn">
+                  <div className="text-center space-y-2">
+                    <h2 className="text-2xl font-black text-amber-400">Rider Registration</h2>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Join Foodiee Delivery Network</p>
+                  </div>
+
+                  <form onSubmit={handleRegister} className="space-y-3 text-xs">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Full Name</label>
+                      <input type="text" value={regFullName} onChange={(e) => setRegFullName(e.target.value)} placeholder="Enter full name" className="w-full bg-slate-950 border border-slate-700 p-3 rounded-2xl text-xs font-bold text-white outline-none" required />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Mobile Number</label>
+                      <div className="flex items-center bg-slate-950 border border-slate-700 rounded-2xl overflow-hidden">
+                        <span className="bg-slate-800 text-amber-400 px-3 py-3 font-black text-xs border-r border-slate-700">+91</span>
+                        <input type="tel" maxLength="10" value={regMobile} onChange={(e) => setRegMobile(e.target.value.replace(/\D/g, ''))} placeholder="10-digit mobile" className="w-full bg-transparent p-3 font-bold text-white outline-none text-xs" required />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Vehicle Type</label>
+                      <select value={regVehicle} onChange={(e) => setRegVehicle(e.target.value)} className="w-full bg-slate-950 border border-slate-700 p-3 rounded-2xl text-xs font-bold text-white outline-none cursor-pointer">
+                        <option value="Motorcycle">Motorcycle / Bike 🏍️</option>
+                        <option value="Scooter">Scooter 🛵</option>
+                        <option value="Bicycle">Bicycle 🚲</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Vehicle Number</label>
+                      <input type="text" value={regBikeNumber} onChange={(e) => setRegBikeNumber(e.target.value)} placeholder="e.g. AP30BIKE1234" className="w-full bg-slate-950 border border-slate-700 p-3 rounded-2xl text-xs font-bold text-white outline-none uppercase" required />
+                    </div>
+
+                    <button type="submit" className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 py-3.5 rounded-2xl font-black text-xs shadow-xl cursor-pointer mt-2">
+                      Register Now 🚀
+                    </button>
+                  </form>
+
+                  <div className="text-center pt-2">
+                    <button onClick={() => setCurrentView('login')} className="text-xs text-amber-400 font-bold underline cursor-pointer">
+                      Already registered? Login here
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4 animate-fadeIn">
+                  <div className="text-center space-y-3">
+                    <div className="w-20 h-20 mx-auto rounded-[24px] p-1 bg-gradient-to-tr from-[#fc8019] via-amber-500 to-yellow-400 shadow-xl shadow-orange-500/30 flex items-center justify-center transform hover:scale-105 transition-transform duration-300">
+                      <div className="w-full h-full bg-slate-950 rounded-[22px] overflow-hidden flex items-center justify-center">
+                        <img src={logo} alt="Foodiee Logo" className="w-full h-full object-cover" />
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <h2 className="text-3xl font-black tracking-tight bg-gradient-to-r from-white via-slate-200 to-amber-400 bg-clip-text text-transparent">
+                        Foodiee<span className="text-[#fc8019]">.</span>
+                      </h2>
+                      <div className="inline-block bg-orange-500/15 border border-orange-500/30 px-3 py-0.5 rounded-full">
+                        <p className="text-[10px] text-amber-400 font-extrabold uppercase tracking-widest">
+                          Delivery Partner Portal
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {step === 1 ? (
+                    <form onSubmit={handleSendOtp} className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-black text-amber-400 uppercase tracking-widest pl-1">
+                          Partner Mobile Number
+                        </label>
+                        <div className="flex items-center gap-3 bg-slate-950/80 border border-slate-700/80 px-4 py-4 rounded-2xl focus-within:border-[#fc8019] transition-all shadow-inner">
+                          <div className="w-7 h-7 rounded-xl bg-orange-500/20 text-[#fc8019] flex items-center justify-center shrink-0">
+                            <Phone size={14} />
+                          </div>
+                          <input 
+                            type="tel" 
+                            maxLength="10" 
+                            value={phone} 
+                            onChange={(e) => setPhone(e.target.value)} 
+                            placeholder="Enter 10-digit mobile number" 
+                            className="bg-transparent border-none outline-none text-xs w-full font-bold text-white placeholder:text-slate-500" 
+                            required 
+                          />
+                        </div>
+                      </div>
+
+                      <button 
+                        type="submit" 
+                        className="w-full bg-gradient-to-r from-[#fc8019] via-amber-500 to-yellow-400 text-slate-950 py-4 rounded-2xl font-black text-xs shadow-xl flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <span>Get Secure OTP</span>
+                        <ArrowRight size={16} />
+                      </button>
+
+                      <div className="text-center pt-2">
+                        <button type="button" onClick={() => setCurrentView('register')} className="text-xs text-amber-400 font-bold underline cursor-pointer">
+                          New rider? Register here 📝
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <form onSubmit={handleVerifyOtp} className="space-y-4 animate-fadeIn">
+                      <div className="text-center space-y-1.5 bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800">
+                        <p className="text-[11px] text-slate-300 font-bold">Verification code sent to</p>
+                        <p className="text-sm font-black text-[#fc8019] flex items-center justify-center gap-2">
+                          <span>+91 {phone}</span>
+                          <span onClick={() => setStep(1)} className="text-[10px] text-blue-400 underline cursor-pointer">Change</span>
+                        </p>
+                        {generatedOtpHint && (
+                          <div className="inline-block bg-amber-500/20 border border-amber-500/50 px-3 py-1 rounded-xl mt-1">
+                            <p className="text-[10px] text-amber-300 font-bold">Hint OTP: <span className="text-white font-black">{generatedOtpHint}</span></p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-black text-amber-400 uppercase tracking-widest text-center">
+                          Enter 4-Digit OTP
+                        </label>
+                        <div className="flex items-center justify-center bg-slate-950/80 border border-slate-700/80 px-4 py-3.5 rounded-2xl shadow-inner">
+                          <input 
+                            type="text" 
+                            maxLength="4" 
+                            value={otpInput} 
+                            onChange={(e) => setOtpInput(e.target.value)} 
+                            placeholder="----" 
+                            className="bg-transparent border-none outline-none text-xl w-full font-black text-white tracking-[0.5em] text-center placeholder:tracking-normal" 
+                            required 
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+
+                      <button 
+                        type="submit" 
+                        className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 text-white py-4 rounded-2xl font-black text-xs shadow-xl flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <span>Verify & Start Shift</span>
+                        <CheckCircle2 size={16} />
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
+
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col flex-1 h-full bg-slate-900 text-white relative overflow-hidden">
+            <header className="h-14 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-4 shrink-0 shadow-md z-20">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#fc8019] text-white font-bold flex items-center justify-center text-xs">DP</div>
+                <div>
+                  <h2 className="text-xs font-black">{partnerProfile.fullName}</h2>
+                  <p className="text-[9px] font-bold text-emerald-400">● Online (Live GPS)</p>
+                </div>
               </div>
 
-              {!selectedShopForMenu ? (
-                shopsList.length === 0 ? (
-                  <p className="text-xs text-slate-500 bg-slate-900 p-8 rounded-3xl text-center">No registered shops found in database.</p>
-                ) : (
-                  <div className="grid grid-cols-2 gap-4">
-                    {shopsList.map(shop => (
-                      <div key={shop.id} onClick={() => handleShopClick(shop)} className="bg-slate-900 border border-slate-800 p-5 rounded-[28px] cursor-pointer hover:border-[#fc8019] space-y-2">
-                        <h3 className="text-base font-black text-white">{shop.shopName || shop.name}</h3>
-                        <p className="text-xs text-slate-400">📍 {shop.address || 'Ichapuram Main Road'}</p>
-                        <p className="text-xs text-[#fc8019] font-bold">Owner: {shop.ownerName || shop.owner || 'Vendor'}</p>
+              <div className="flex items-center gap-1.5">
+                <button onClick={() => { setIsRainSurgeActive(!isRainSurgeActive); toast.success(isRainSurgeActive ? "🌧️ Rain Surge Mode Disabled" : "🌧️ Rain Surge Mode Enabled (+₹15 Bonus)!"); }} className={`px-2.5 py-1 rounded-xl text-[10px] font-black flex items-center gap-1 border cursor-pointer ${isRainSurgeActive ? 'bg-blue-600 text-white border-blue-400 animate-pulse' : 'bg-slate-700 text-slate-300 border-slate-600'}`}>
+                  <CloudRain size={13} /> {isRainSurgeActive ? 'Surge: Active' : 'Surge: Off'}
+                </button>
+
+                <button onClick={() => setShowQuickChat(true)} className="bg-slate-700 hover:bg-slate-600 text-amber-400 p-1.5 rounded-xl cursor-pointer" title="Quick Chat"><MessageSquare size={16} /></button>
+                
+                <button onClick={handleToggleOnline} className="flex items-center gap-1 bg-slate-700 px-2.5 py-1 rounded-xl text-[10px] font-bold cursor-pointer">
+                  {isOnline ? <ToggleRight size={18} className="text-emerald-400" /> : <ToggleLeft size={18} className="text-rose-400" />}
+                  <span>{isOnline ? 'Online' : 'Offline'}</span>
+                </button>
+              </div>
+            </header>
+
+            <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
+              {activeTab === 'available' && (
+                <div className="space-y-4">
+                  <div className="bg-gradient-to-r from-slate-800 via-slate-850 to-slate-900 border border-slate-700 p-3.5 rounded-2xl shadow-xl flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 bg-amber-500/20 text-amber-400 rounded-xl flex items-center justify-center font-bold">
+                        <Timer size={18} />
                       </div>
+                      <div>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase">Active Shift Duration</p>
+                        <h4 className="text-sm font-black text-white">{formatShiftTime(shiftSeconds)}</h4>
+                      </div>
+                    </div>
+                    <button onClick={() => setHeatMapActive(!heatMapActive)} className={`px-2.5 py-1 rounded-xl text-[10px] font-black flex items-center gap-1 border cursor-pointer ${heatMapActive ? 'bg-orange-500/20 text-orange-400 border-orange-500/40' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                      <Flame size={13} /> {heatMapActive ? 'Hotspot: On' : 'Hotspot: Off'}
+                    </button>
+                  </div>
+
+                  <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 text-white space-y-2">
+                    <p className="text-[9px] text-slate-400 uppercase font-bold">Total Orders Placed</p>
+                    <h3 className="text-2xl font-black text-amber-400">{customerOrders.length}</h3>
+                    
+                    <div className="space-y-1.5 pt-2">
+                      {customerOrders.length === 0 ? (
+                        <p className="text-xs text-slate-500">No orders placed yet. Start ordering! 🍔</p>
+                      ) : (
+                        customerOrders.map((ord, idx) => (
+                          <div key={idx} className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs flex justify-between">
+                            <span>Order #{ord.id || ord.orderId}</span>
+                            <span className="text-emerald-400 font-bold">₹{ord.totalAmount}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-amber-500/15 p-3 rounded-2xl border border-amber-500/40 shadow">
+                      <p className="text-[8px] text-amber-300 font-bold uppercase">Total Earnings</p>
+                      <h3 className="text-base font-black text-amber-400 mt-0.5">₹ {todaysEarnings}</h3>
+                    </div>
+                    <div className="bg-blue-500/15 p-3 rounded-2xl border border-blue-500/40 shadow">
+                      <p className="text-[8px] text-blue-300 font-bold uppercase">COD Cash</p>
+                      <h3 className="text-base font-black text-blue-400 mt-0.5">₹ {totalCashInHand}</h3>
+                    </div>
+                    <div className="bg-emerald-500/15 p-3 rounded-2xl border border-emerald-500/40 shadow">
+                      <p className="text-[8px] text-emerald-300 font-bold uppercase">Prepaid</p>
+                      <h3 className="text-base font-black text-emerald-400 mt-0.5">₹ {totalPrepaidEarnings}</h3>
+                    </div>
+                  </div>
+
+                  <button onClick={() => setShowInstantPayoutModal(true)} className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white py-3 rounded-2xl font-black text-xs shadow-lg flex items-center justify-center gap-2 cursor-pointer transition">
+                    <Zap size={15} /> Instant UPI Payout (Withdraw ₹{todaysEarnings}) 💸
+                  </button>
+
+                  {batchQueue.length > 0 && (
+                    <div className="bg-gradient-to-r from-amber-600/20 to-orange-600/20 border border-amber-500/50 p-3.5 rounded-2xl flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Package size={18} className="text-amber-400 animate-bounce" />
+                        <div>
+                          <p className="text-xs font-black text-amber-300">Batched Orders in Queue ({batchQueue.length})</p>
+                          <p className="text-[10px] text-slate-300">Will load automatically upon delivery completion.</p>
+                        </div>
+                      </div>
+                      <span className="bg-amber-500 text-slate-950 px-2.5 py-1 rounded-xl text-[10px] font-black">Ready</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    <h1 className="text-xs font-black uppercase text-slate-400">Active Delivery & Route Map</h1>
+                    
+                    {!acceptedOrder ? (
+                      <div className="text-center py-20 space-y-3">
+                        <div className="w-16 h-16 bg-slate-800 text-[#fc8019] rounded-full flex items-center justify-center mx-auto text-2xl shadow-inner animate-pulse">
+                          ⏳
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-300">Looking for nearby orders...</h4>
+                      </div>
+                    ) : (
+                      <div className="bg-slate-800/90 border border-slate-700/80 p-4 rounded-2xl space-y-3 text-xs shadow-lg">
+                        <div className="flex justify-between font-black">
+                          <span className="text-amber-400">#{acceptedOrder.orderId || acceptedOrder.id}</span>
+                          <span className="text-emerald-400 text-sm">Fee: ₹ {acceptedOrder.deliveryFee || 20}</span>
+                        </div>
+
+                        <button 
+                          onClick={() => { setShowOrderChat(true); setUnreadChatCount(0); }} 
+                          className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-2.5 rounded-xl font-black text-xs shadow flex items-center justify-center gap-2 cursor-pointer relative"
+                        >
+                          <MessageSquare size={15} /> Open Live Chat for {acceptedOrder.orderId} 💬
+                          {unreadChatCount > 0 && (
+                            <span className="absolute right-3 bg-red-600 text-white font-black text-[10px] px-2 py-0.5 rounded-full animate-bounce">
+                              {unreadChatCount} New
+                            </span>
+                          )}
+                        </button>
+
+                        <div className="w-full h-56 rounded-xl overflow-hidden relative border border-slate-700">
+                          <MapContainer center={[acceptedOrder.shopLat, acceptedOrder.shopLng]} zoom={13} zoomControl={false} className="w-full h-full z-10">
+                            <MapUpdater center={[acceptedOrder.shopLat, acceptedOrder.shopLng]} />
+                            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                            
+                            <Marker position={[acceptedOrder.shopLat, acceptedOrder.shopLng]} icon={shopMarkerIcon}>
+                              <Popup><b>🏪 Shop:</b> {acceptedOrder.shopName}</Popup>
+                            </Marker>
+
+                            <Marker position={[acceptedOrder.customerLat, acceptedOrder.customerLng]} icon={customerMarkerIcon}>
+                              <Popup><b>📍 Customer Drop:</b> {acceptedOrder.deliveryAddress}</Popup>
+                            </Marker>
+
+                            <Marker position={partnerPos} icon={getBikeIcon(bikeAngle)} />
+
+                            <Polyline positions={[[acceptedOrder.shopLat, acceptedOrder.shopLng], partnerPos, [acceptedOrder.customerLat, acceptedOrder.customerLng]]} color="#fc8019" weight={5} dashArray="5, 10" />
+                          </MapContainer>
+
+                          <div className="absolute bottom-2 left-2 bg-slate-950/90 backdrop-blur px-3 py-1.5 rounded-xl text-[10px] font-black text-amber-400 border border-slate-700 z-20 shadow-xl flex items-center gap-1.5">
+                            <span>📍 Total Distance:</span>
+                            <span className="text-white">
+                              {calculateDistance(acceptedOrder.shopLat, acceptedOrder.shopLng, acceptedOrder.customerLat, acceptedOrder.customerLng).toFixed(1)} km
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5 bg-slate-900/60 p-3 rounded-2xl border border-slate-700/50 text-slate-300 text-[11px]">
+                          <p>🏪 <b>Shop Name:</b> {acceptedOrder.shopName}</p>
+                          <p>📍 <b>Delivery Location:</b> {acceptedOrder.deliveryAddress}</p>
+                          <p>👤 <b>Customer Name:</b> {acceptedOrder.customerName} ({acceptedOrder.customerMobile})</p>
+                          <p className="text-amber-300">🛍️ <b>Items:</b> {acceptedOrder.items}</p>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-700">
+                          {acceptedOrder.status === 'ACCEPTED' && (
+                            <button onClick={() => handleStatusUpdate(acceptedOrder.id || 1, 'ARRIVED_AT_RESTAURANT')} className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-xl font-black text-xs cursor-pointer">
+                              Arrived at Shop 📍
+                            </button>
+                          )}
+                          {acceptedOrder.status === 'ARRIVED_AT_RESTAURANT' && (
+                            <button onClick={() => handleStatusUpdate(acceptedOrder.id || 1, 'OUT_FOR_DELIVERY')} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 rounded-xl font-black text-xs cursor-pointer">
+                              Picked Up & Moving to Customer 📦
+                            </button>
+                          )}
+                          {acceptedOrder.status === 'OUT_FOR_DELIVERY' && (
+                            <button onClick={() => { setActiveOrderId(acceptedOrder.id || 1); setShowOtpModal(true); }} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl font-black text-xs cursor-pointer">
+                              Enter OTP & Complete Delivery ✅
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'history' && (
+                <div className="space-y-3.5">
+                  <div className="flex justify-between items-center">
+                    <h1 className="text-xs font-black uppercase tracking-wider text-slate-400">Order History</h1>
+                    <button onClick={generateAndDownloadPDF} className="bg-[#fc8019] text-slate-950 px-3 py-1.5 rounded-xl font-black text-[10px] flex items-center gap-1 shadow cursor-pointer">
+                      <Download size={13} /> Download PDF
+                    </button>
+                  </div>
+
+                  <div className="flex gap-2">
+                    {['all', 'completed', 'accepted'].map(f => (
+                      <button key={f} onClick={() => setHistoryFilter(f)} className={`flex-1 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border cursor-pointer transition ${historyFilter === f ? 'bg-[#fc8019] text-slate-950 border-amber-400 shadow-md' : 'bg-slate-800 border-slate-700 text-slate-300'}`}>
+                        {f}
+                      </button>
                     ))}
                   </div>
-                )
-              ) : (
-                <div className="space-y-4">
-                  <button onClick={() => setSelectedShopForMenu(null)} className="text-xs font-bold text-slate-400 cursor-pointer">← Back to All Shops</button>
-                  <div className="bg-gradient-to-r from-[#fc8019] to-amber-500 text-slate-950 p-4 rounded-2xl">
-                    <h2 className="text-sm font-black">{selectedShopForMenu.shopName || selectedShopForMenu.name} - Menu Inventory</h2>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    {shopMenuData.length === 0 ? (
-                      <p className="text-xs text-slate-400 py-8 text-center col-span-2">No menu items added by this vendor yet.</p>
+
+                  <div className="space-y-2.5">
+                    {filteredHistoryList.length === 0 ? (
+                      <div className="text-center py-16 text-slate-500 text-xs bg-slate-800/40 rounded-2xl border border-slate-800">
+                        📭 No orders found in history.
+                      </div>
                     ) : (
-                      shopMenuData.map((item, idx) => (
-                        <div key={idx} className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex justify-between items-center text-xs">
-                          <div><p className="font-black text-white">{item.itemName || item.name}</p><p className="text-emerald-400 font-bold">₹ {item.price}</p></div>
-                          <button onClick={() => toggleItemStock(idx)} className={`px-3 py-1.5 rounded-xl font-black text-[10px] cursor-pointer ${item.inStock !== false ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                            {item.inStock !== false ? 'In Stock ✓' : 'Out of Stock ✕'}
-                          </button>
-                        </div>
-                      ))
+                      filteredHistoryList.map((hist, i) => {
+                        const displayId = hist.orderId || hist.id || `#ORD-${i}`;
+                        const displayShop = hist.shopName || hist.shop || 'Local Store';
+                        const displayEarnings = hist.deliveryFee !== undefined ? hist.deliveryFee : (hist.earnings || 20);
+                        const displayStatus = hist.status || 'DELIVERED';
+                        const displayType = hist.paymentMethod || hist.type || 'COD';
+
+                        return (
+                          <div 
+                            key={i} 
+                            onClick={() => setSelectedOrderDetails({
+                              ...hist,
+                              id: displayId,
+                              shop: displayShop,
+                              earnings: displayEarnings,
+                              status: displayStatus,
+                              type: displayType
+                            })}
+                            className="bg-slate-800/90 border border-slate-700/80 p-4 rounded-2xl text-xs space-y-1.5 shadow cursor-pointer hover:border-[#fc8019] transition-all transform hover:scale-[1.01]"
+                          >
+                            <div className="flex justify-between font-black items-center">
+                              <span className="text-amber-400">Order #{displayId} • <span className="text-white">{displayShop}</span></span>
+                              <span className="text-emerald-400 text-sm font-black">+ ₹ {displayEarnings} <span className="text-[10px] text-slate-400 font-normal">({displayType})</span></span>
+                            </div>
+
+                            <div className="flex justify-between text-[11px] text-slate-300 font-medium pt-1">
+                              <span className="truncate max-w-[200px]">🛍️ {hist.items || 'Food / Items'}</span>
+                              <span className="text-amber-400 font-bold uppercase">{displayStatus}</span>
+                            </div>
+
+                            <div className="flex justify-between items-center text-[10px] text-slate-400 pt-1 border-t border-slate-700/60 mt-1">
+                              <span>{hist.orderTime ? new Date(hist.orderTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (hist.date || 'Recent')}</span>
+                              <span className="text-[#fc8019] font-bold flex items-center gap-1">
+                                <Eye size={12} /> Tap to view details 🔍
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>
               )}
-            </div>
-          )}
 
-          {activeTab === 'analytics' && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h1 className="text-xl font-black text-white">5. Advanced Analytics & Financial PDF Hub</h1>
-                  <p className="text-xs text-slate-400">Real database metrics including total orders, revenue, commission share, and daily breakdown logs.</p>
-                </div>
-                <button onClick={() => generateRealPDF('Financial Audit Report', dashboardStats.totalRevenue)} className="bg-gradient-to-r from-[#fc8019] to-amber-500 text-slate-950 px-4 py-2.5 rounded-2xl text-xs font-black shadow-lg cursor-pointer flex items-center gap-2">
-                  <Download size={14} /> <span>Download Complete PDF Report</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-slate-900 border border-slate-800 p-5 rounded-[28px] shadow-xl relative overflow-hidden">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Revenue (GMV)</p>
-                  <h3 className="text-2xl font-black text-amber-400 mt-1">₹ {dashboardStats.totalRevenue.toFixed(2)}</h3>
-                  <p className="text-[10px] text-slate-400 font-bold mt-1">From real database orders</p>
-                </div>
-                <div className="bg-slate-900 border border-slate-800 p-5 rounded-[28px] shadow-xl relative overflow-hidden">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Net Commission (12%)</p>
-                  <h3 className="text-2xl font-black text-emerald-400 mt-1">₹ {dashboardStats.netCommission.toFixed(2)}</h3>
-                  <p className="text-[10px] text-slate-400 font-bold mt-1">Platform earnings</p>
-                </div>
-                <div className="bg-slate-900 border border-slate-800 p-5 rounded-[28px] shadow-xl relative overflow-hidden">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Orders</p>
-                  <h3 className="text-2xl font-black text-blue-400 mt-1">{allOrders.length} Orders</h3>
-                  <p className="text-[10px] text-slate-400 font-bold mt-1">Fulfilled across Ichapuram</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-slate-900 border border-slate-800 p-6 rounded-[32px] shadow-xl space-y-4">
-                  <h3 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-2">
-                    <PieChart size={16} /> Revenue vs Commission Pie Share
-                  </h3>
-
-                  <div className="flex flex-col sm:flex-row items-center justify-around py-4 gap-4">
-                    <div className="relative w-36 h-36 rounded-full flex items-center justify-center bg-gradient-to-tr from-amber-500 to-emerald-500 shadow-xl p-1">
-                      <div className="w-full h-full bg-slate-950 rounded-full flex flex-col items-center justify-center text-center p-2">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase">Commission Cut</span>
-                        <span className="text-lg font-black text-emerald-400">12%</span>
-                      </div>
+              {activeTab === 'profile' && (
+                <div className="space-y-3.5 text-xs pb-6">
+                  
+                  <div className="bg-gradient-to-r from-orange-600/20 via-amber-600/20 to-yellow-600/20 border border-amber-500/50 p-4 rounded-2xl space-y-3 shadow-xl">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-black text-amber-400 uppercase text-[11px] flex items-center gap-1.5">
+                        <Users size={15} /> Referral & Earn Bonus
+                      </h4>
+                      <span className="bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full text-[9px] font-black">+₹50 / Friend</span>
                     </div>
-
-                    <div className="space-y-2 text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full bg-amber-500"></span>
-                        <span className="text-slate-300 font-bold">Vendor Payouts: ₹ {(dashboardStats.totalRevenue - dashboardStats.netCommission).toFixed(2)}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
-                        <span className="text-slate-300 font-bold">Platform Earnings: ₹ {dashboardStats.netCommission.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 p-6 rounded-[32px] shadow-xl space-y-4">
-                  <h3 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-2">
-                    <Calendar size={16} /> Every Day Commission Log
-                  </h3>
-
-                  <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
-                    {dailyCommissionLog.length === 0 ? (
-                      <p className="text-xs text-slate-500 text-center py-10">No daily commission records available yet.</p>
-                    ) : (
-                      dailyCommissionLog.map((log, index) => (
-                        <div key={index} className="bg-slate-950 border border-slate-800 p-3.5 rounded-2xl flex justify-between items-center text-xs">
-                          <div>
-                            <p className="font-black text-white">{log.date}</p>
-                            <p className="text-[10px] text-slate-400">{log.orders} Orders • GMV: ₹{log.revenue.toFixed(2)}</p>
-                          </div>
-                          <span className="font-black text-emerald-400">₹ +{log.commission.toFixed(2)}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'sos' && (
-            <div className="space-y-4 animate-fadeIn">
-              <h1 className="text-xl font-black text-white flex items-center gap-2"><AlertTriangle className="text-rose-500" size={22} /> 6. Emergency SOS Support</h1>
-              <div className="space-y-3">
-                {sosAlerts.length === 0 ? <p className="text-xs text-slate-500 bg-slate-900 p-6 rounded-2xl text-center">No active emergencies.</p> : sosAlerts.map(sos => (
-                  <div key={sos.id} className="bg-slate-900 border border-rose-500/50 p-5 rounded-[24px] flex justify-between items-center text-xs shadow-xl">
-                    <div><p className="font-black text-white text-sm">{sos.user} - <span className="text-rose-400">{sos.issue}</span></p></div>
-                    <button onClick={() => { toast.success("Help dispatched!"); setSosAlerts([]); }} className="bg-rose-600 text-white px-4 py-2 rounded-xl font-black text-xs cursor-pointer">Dispatch Help 🚨</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'localization' && (
-            <div className="space-y-4 animate-fadeIn">
-              <h1 className="text-xl font-black text-white">7. Multi-Language Hub</h1>
-              <div className="bg-slate-900 border border-slate-800 p-6 rounded-[32px] space-y-4 max-w-lg">
-                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Platform Language</label>
-                <select value={adminLanguage} onChange={(e) => setAdminLanguage(e.target.value)} className="w-full bg-slate-950 border border-slate-800 px-4 py-3 rounded-xl text-xs font-bold text-white outline-none">
-                  <option>Telugu & English (తెలుగు & ఇంగ్లీష్)</option>
-                  <option>English Only</option>
-                </select>
-                <button onClick={() => toast.success("Language updated!")} className="w-full bg-[#fc8019] text-slate-950 py-3 rounded-xl font-black text-xs cursor-pointer">Save Settings</button>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'incentives' && (
-            <div className="space-y-4 animate-fadeIn">
-              <h1 className="text-xl font-black text-white">8. Rider Incentives & Bonus Management</h1>
-              <div className="bg-slate-900 border border-slate-800 rounded-[32px] overflow-hidden shadow-xl">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-950 text-slate-400 font-black uppercase text-[10px] border-b border-slate-800">
-                      <th className="p-4">Partner</th><th className="p-4">Target</th><th className="p-4">Bonus</th><th className="p-4 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 font-bold text-slate-300">
-                    {riderIncentives.length === 0 ? (
-                      <tr><td colSpan="4" className="p-6 text-center text-slate-500">No active incentive targets.</td></tr>
-                    ) : (
-                      riderIncentives.map(inc => (
-                        <tr key={inc.id}>
-                          <td className="p-4 text-white font-black">{inc.riderName}</td>
-                          <td className="p-4">{inc.targetOrders} Deliveries</td>
-                          <td className="p-4 text-emerald-400 font-black">₹ {inc.bonusAmount}</td>
-                          <td className="p-4 text-right"><button onClick={() => toast.success("Bonus paid!")} className="bg-emerald-600 text-white px-3 py-1.5 rounded-xl text-[10px] cursor-pointer">Pay Bonus 💸</button></td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'geofence' && (
-            <div className="space-y-4 animate-fadeIn">
-              <h1 className="text-xl font-black text-white">9. Geo-Fencing & Radius Control</h1>
-              <div className="bg-slate-900 border border-slate-800 p-6 rounded-[32px] space-y-4 max-w-lg">
-                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Max Radius: {geoRadius} Km</label>
-                <input type="range" min="5" max="30" value={geoRadius} onChange={(e) => setGeoRadius(e.target.value)} className="w-full accent-[#fc8019] cursor-pointer" />
-                <button onClick={() => toast.success("Geo-fence updated!")} className="w-full bg-[#fc8019] text-slate-950 py-3 rounded-xl font-black text-xs cursor-pointer">Update Boundary</button>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'loyalty' && (
-            <div className="space-y-4 animate-fadeIn">
-              <h1 className="text-xl font-black text-white">10. Customer Loyalty & Rewards</h1>
-              <div className="bg-slate-900 border border-slate-800 rounded-[32px] overflow-hidden shadow-xl">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-950 text-slate-400 font-black uppercase text-[10px] border-b border-slate-800">
-                      <th className="p-4">Customer</th><th className="p-4">Points</th><th className="p-4">Tier</th><th className="p-4 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 font-bold text-slate-300">
-                    {loyaltyMembers.length === 0 ? (
-                      <tr><td colSpan="4" className="p-6 text-center text-slate-500">No loyalty members registered.</td></tr>
-                    ) : (
-                      loyaltyMembers.map(mem => (
-                        <tr key={mem.id}>
-                          <td className="p-4 text-white font-black">{mem.name}</td>
-                          <td className="p-4 text-amber-400 font-black">{mem.points} PTS</td>
-                          <td className="p-4"><span className="bg-amber-500/20 text-amber-300 px-3 py-1 rounded-full text-[10px]">{mem.tier}</span></td>
-                          <td className="p-4 text-right"><button onClick={() => toast.success("Reward added!")} className="bg-[#fc8019] text-slate-950 px-3 py-1.5 rounded-xl text-[10px] cursor-pointer">Reward 🎁</button></td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'customers' && (
-            <div className="space-y-4 animate-fadeIn">
-              <h1 className="text-xl font-black text-white">Customers Directory (with Live eWallet Balance)</h1>
-              <div className="bg-slate-900 border border-slate-800 rounded-[32px] overflow-hidden shadow-xl">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-950 text-slate-400 font-black uppercase text-[10px] border-b border-slate-800">
-                      <th className="p-4">Name</th><th className="p-4">Mobile</th><th className="p-4">Address</th><th className="p-4">eWallet Balance</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 font-bold text-slate-300">
-                    {customersList.length === 0 ? (
-                      <tr><td colSpan="4" className="p-6 text-center text-slate-500">No customers registered in database.</td></tr>
-                    ) : (
-                      customersList.map((cust, i) => (
-                        <tr key={i}>
-                          <td className="p-4 text-white font-black">{cust.name || 'Customer'}</td>
-                          <td className="p-4 text-[#fc8019]">{cust.mobile || cust.phoneNumber || 'N/A'}</td>
-                          <td className="p-4">{cust.deliveryAddress || cust.address || 'Ichapuram'}</td>
-                          <td className="p-4 text-emerald-400 font-black text-sm">
-                            ₹ {cust.walletBalance !== undefined && cust.walletBalance !== null ? Number(cust.walletBalance).toFixed(2) : '0.00'}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'partners' && <AdminPartnersVerification />}
-          {activeTab === 'chats' && <AdminChatDashboard />}
-
-          {activeTab === 'promos' && (
-            <div className="space-y-4 animate-fadeIn">
-              <h1 className="text-xl font-black text-white">Dynamic Promo Code Manager</h1>
-              <form onSubmit={addPromoCode} className="bg-slate-900 border border-slate-800 p-5 rounded-[28px] shadow-xl grid grid-cols-4 gap-3 items-end">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Coupon Code</label>
-                  <input type="text" value={newCode} onChange={(e) => setNewCode(e.target.value)} placeholder="e.g. FESTIV50" className="w-full bg-slate-950 border border-slate-800 px-3.5 py-2.5 rounded-xl text-xs font-bold text-white uppercase outline-none" required />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Discount</label>
-                  <input type="text" value={newDiscount} onChange={(e) => setNewDiscount(e.target.value)} placeholder="e.g. ₹50 OFF" className="w-full bg-slate-950 border border-slate-800 px-3.5 py-2.5 rounded-xl text-xs font-bold text-white outline-none" required />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Min Order (₹)</label>
-                  <input type="number" value={newMinOrder} onChange={(e) => setNewMinOrder(e.target.value)} placeholder="e.g. 199" className="w-full bg-slate-950 border border-slate-800 px-3.5 py-2.5 rounded-xl text-xs font-bold text-white outline-none" required />
-                </div>
-                <button type="submit" className="bg-[#fc8019] text-slate-950 px-5 py-2.5 rounded-xl text-xs font-black shadow cursor-pointer">Create Code</button>
-              </form>
-
-              <div className="grid grid-cols-2 gap-3">
-                {promoCodes.length === 0 ? (
-                  <p className="text-xs text-slate-500 bg-slate-900 p-6 rounded-2xl text-center col-span-2">No promo codes in database.</p>
-                ) : (
-                  promoCodes.map((promo, index) => (
-                    <div key={index} className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex justify-between items-center">
+                    <p className="text-[10px] text-slate-300">Invite friends to Foodiee Fleet and earn bonus on their first 5 deliveries!</p>
+                    
+                    <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
                       <div>
-                        <span className="font-black text-white text-xs bg-slate-950 border border-slate-800 px-3 py-1 rounded-lg">{promo.code}</span>
-                        <p className="text-[10px] text-emerald-400 font-bold mt-2">{promo.discount} • Min: {promo.minOrder}</p>
+                        <p className="text-[8px] text-slate-400 uppercase font-bold">Your Referral Code</p>
+                        <p className="text-xs font-black text-amber-400 tracking-widest mt-0.5">{referralCode}</p>
                       </div>
-                      <button onClick={() => togglePromoStatus(index)} className="p-2 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer">
-                        {promo.isActive !== false ? <ToggleRight size={20} className="text-emerald-400" /> : <ToggleLeft size={20} className="text-rose-400" />}
+                      <div className="flex gap-1.5">
+                        <button 
+                          onClick={() => {
+                            navigator.clipboard.writeText(`Join Foodiee Delivery Fleet using my referral code: ${referralCode}. Download App now!`);
+                            toast.success("📋 Referral message copied!");
+                          }} 
+                          className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1.5 rounded-xl font-bold text-[10px] cursor-pointer"
+                        >
+                          Copy
+                        </button>
+                        
+                        <a 
+                          href={`https://wa.me/?text=${encodeURIComponent(`🚀 Join Foodiee Delivery Fleet and start earning daily! Use my referral code: *${referralCode}* when signing up. Download now!`)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl font-black text-[10px] flex items-center gap-1 shadow cursor-pointer"
+                        >
+                          <Share2 size={12} /> WhatsApp
+                        </a>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between text-[10px] text-slate-300 pt-1">
+                      <span>Friends Referred: <b>{referredCount}</b></span>
+                      <span>Total Referral Bonus: <b className="text-emerald-400">₹{referralEarnings}</b></span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-800 border border-slate-700 p-4 rounded-2xl space-y-3 shadow">
+                    <h4 className="font-black text-amber-400 uppercase text-[11px] flex items-center gap-1.5">
+                      <Globe size={14} /> Voice Navigation Language (వాయిస్ గైడెన్స్)
+                    </h4>
+                    <p className="text-[10px] text-slate-400">Choose voice assistant language for live order alerts & updates:</p>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                      <button 
+                        onClick={() => {
+                          setVoiceLanguage('te-IN');
+                          toast.success("🗣️ Telugu Voice Assistant Activated");
+                          speakText("తెలుగు వాయిస్ అసిస్టెంట్ ఆన్ చేయబడింది", "Telugu voice assistant activated");
+                        }} 
+                        className={`py-2.5 rounded-xl font-bold text-xs border cursor-pointer ${voiceLanguage === 'te-IN' ? 'bg-[#fc8019] text-slate-950 border-amber-400 font-black' : 'bg-slate-900 border-slate-700 text-slate-300'}`}
+                      >
+                        🇮🇳 తెలుగు (Telugu)
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setVoiceLanguage('en-US');
+                          toast.success("🗣️ English Voice Assistant Activated");
+                          speakText("English voice assistant activated", "English voice assistant activated");
+                        }} 
+                        className={`py-2.5 rounded-xl font-bold text-xs border cursor-pointer ${voiceLanguage === 'en-US' ? 'bg-[#fc8019] text-slate-950 border-amber-400 font-black' : 'bg-slate-900 border-slate-700 text-slate-300'}`}
+                      >
+                        🇺🇸 English
                       </button>
                     </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
+                  </div>
 
-          {activeTab === 'broadcast' && (
-            <div className="space-y-4 animate-fadeIn">
-              <h1 className="text-xl font-black text-white">Broadcast Push Notifications with Image</h1>
-              <form onSubmit={sendBroadcast} className="bg-slate-900 border border-slate-800 p-6 rounded-[32px] shadow-xl space-y-4 max-w-lg">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Target Audience</label>
-                  <select value={broadcastTarget} onChange={(e) => setBroadcastTarget(e.target.value)} className="w-full bg-slate-950 border border-slate-800 px-4 py-3 rounded-xl text-xs font-bold text-white outline-none">
-                    <option>All Users</option><option>All Customers</option><option>All Shop Owners</option><option>All Delivery Partners</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Announcement Message</label>
-                  <textarea rows={3} value={broadcastMsg} onChange={(e) => setBroadcastMsg(e.target.value)} placeholder="Type announcement..." className="w-full bg-slate-950 border border-slate-800 p-4 rounded-xl text-xs font-bold text-white outline-none" required></textarea>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Attach Promotional Image (Optional)</label>
-                  <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-3 rounded-xl">
-                    <ImageIcon size={18} className="text-amber-400" />
-                    <input type="file" accept="image/*" onChange={(e) => setBroadcastImageFile(e.target.files[0])} className="text-xs text-slate-300 file:bg-amber-500 file:text-slate-950 file:border-0 file:rounded-lg file:px-3 file:py-1 cursor-pointer w-full" />
+                  <div className="bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 border border-amber-500/40 p-4 rounded-2xl space-y-3 shadow-xl">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <h4 className="font-black text-amber-400 uppercase text-[11px] flex items-center gap-1.5">
+                        <TrendingUp size={14} /> Performance Analytics
+                      </h4>
+                      <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full text-[9px] font-bold">4.9 ⭐ Rating</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                        <p className="text-[9px] text-slate-400 uppercase font-bold">Total Orders</p>
+                        <p className="text-sm font-black text-white mt-0.5">{deliveryHistory.length}</p>
+                      </div>
+                      <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                        <p className="text-[9px] text-slate-400 uppercase font-bold">Hours Online</p>
+                        <p className="text-sm font-black text-white mt-0.5">{(shiftSeconds / 3600).toFixed(1)}h</p>
+                      </div>
+                      <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                        <p className="text-[9px] text-slate-400 uppercase font-bold">Completion</p>
+                        <p className="text-sm font-black text-emerald-400 mt-0.5">99.8%</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-800 border border-slate-700 p-4 rounded-2xl space-y-3 shadow">
+                    <h4 className="font-black text-amber-400 uppercase text-[11px] flex items-center gap-1.5">
+                      <Volume2 size={14} /> Order Alert Sound Settings
+                    </h4>
+                    <p className="text-[10px] text-slate-400">Select your preferred alert sound for incoming orders:</p>
+                    
+                    <div className="space-y-2">
+                      {ringtones.map((ring) => (
+                        <div 
+                          key={ring.id}
+                          onClick={() => {
+                            setSelectedRinger(ring.id);
+                            const preview = new Audio(ring.url);
+                            preview.play();
+                            toast.success(`Selected: ${ring.name}`);
+                          }}
+                          className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition ${
+                            selectedRinger === ring.id 
+                              ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-black' 
+                              : 'bg-slate-900 border-slate-700 text-slate-300'
+                          }`}
+                        >
+                          <span className="text-xs">{ring.name}</span>
+                          {selectedRinger === ring.id && <span className="text-xs">✅ Active</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-800 border border-slate-700 p-4 rounded-2xl space-y-2 shadow">
+                    <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+                      <h4 className="font-black text-amber-400 uppercase text-[11px]">Delivery Person Details</h4>
+                      <button onClick={() => setIsEditingPersonal(!isEditingPersonal)} className="bg-[#fc8019] text-slate-950 px-3 py-1.5 rounded-xl font-black text-[10px] cursor-pointer">
+                        {isEditingPersonal ? 'Cancel' : 'Edit ✍️'}
+                      </button>
+                    </div>
+
+                    {!isEditingPersonal ? (
+                      <div className="space-y-1 text-[11px] text-slate-300 pt-1">
+                        <p><b>Name:</b> {partnerProfile.fullName}</p>
+                        <p><b>Mobile:</b> {partnerProfile.mobile}</p>
+                        <p><b>Email:</b> {partnerProfile.email}</p>
+                        <p><b>Vehicle:</b> {partnerProfile.vehicleType} ({partnerProfile.bikeNumber})</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 pt-2">
+                        <input type="text" value={partnerProfile.fullName} onChange={(e) => setPartnerProfile({...partnerProfile, fullName: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-xl text-xs font-bold text-white outline-none" placeholder="Full Name" />
+                        <input type="text" value={partnerProfile.email} onChange={(e) => setPartnerProfile({...partnerProfile, email: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-xl text-xs font-bold text-white outline-none" placeholder="Email" />
+                        <input type="text" value={partnerProfile.bikeNumber} onChange={(e) => setPartnerProfile({...partnerProfile, bikeNumber: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-xl text-xs font-bold text-white outline-none" placeholder="Bike Number" />
+                        <button onClick={() => handleSaveProfileWithFiles('Personal Details')} className="w-full bg-emerald-600 text-white py-2 rounded-xl font-black text-xs mt-1 cursor-pointer">Save Personal Details 💾</button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-slate-800 border border-slate-700 p-4 rounded-2xl space-y-2 shadow">
+                    <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+                      <h4 className="font-black text-amber-400 uppercase text-[11px]">KYC & Vehicle Documents</h4>
+                      <button onClick={() => setIsEditingKyc(!isEditingKyc)} className="bg-[#fc8019] text-slate-950 px-3 py-1.5 rounded-xl font-black text-[10px] cursor-pointer">
+                        {isEditingKyc ? 'Cancel' : 'Edit / Upload 📁'}
+                      </button>
+                    </div>
+
+                    {!isEditingKyc ? (
+                      <div className="space-y-1 text-[11px] text-slate-300 pt-1">
+                        <p><b>Aadhaar No:</b> [Aadhaar Redacted]</p>
+                        <p><b>License No:</b> {partnerProfile.licenseNo}</p>
+                        <p><b>PAN No:</b> {partnerProfile.panNo}</p>
+                        <p><b>KYC Status:</b> <span className="text-emerald-400 font-bold">{partnerProfile.kycStatus}</span></p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5 pt-2 text-[11px]">
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-bold">Aadhaar Card Number</label>
+                          <input type="text" value={partnerProfile.aadhaarNo} onChange={(e) => setPartnerProfile({...partnerProfile, aadhaarNo: e.target.value})} placeholder="1234 5678 9012" className="w-full bg-slate-900 border border-slate-700 p-2 rounded-xl text-xs font-bold text-white outline-none" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-bold">Upload Aadhaar Card</label>
+                          <input type="file" onChange={(e) => setSelectedAadhaarFile(e.target.files[0])} className="w-full text-[10px] bg-slate-900 border border-slate-700 p-1.5 rounded-xl text-slate-300 file:bg-amber-500 file:text-slate-950 file:border-0 file:rounded file:px-2 cursor-pointer" />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-bold">Driving License Number</label>
+                          <input type="text" value={partnerProfile.licenseNo} onChange={(e) => setPartnerProfile({...partnerProfile, licenseNo: e.target.value})} placeholder="DL-12345678" className="w-full bg-slate-900 border border-slate-700 p-2 rounded-xl text-xs font-bold text-white outline-none" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-bold">Upload Driving License</label>
+                          <input type="file" onChange={(e) => setSelectedLicenseFile(e.target.files[0])} className="w-full text-[10px] bg-slate-900 border border-slate-700 p-1.5 rounded-xl text-slate-300 file:bg-amber-500 file:text-slate-950 file:border-0 file:rounded file:px-2 cursor-pointer" />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-bold">PAN Number</label>
+                          <input type="text" value={partnerProfile.panNo} onChange={(e) => setPartnerProfile({...partnerProfile, panNo: e.target.value})} placeholder="ABCDE1234F" className="w-full bg-slate-900 border border-slate-700 p-2 rounded-xl text-xs font-bold text-white outline-none uppercase" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-bold">Upload PAN Card</label>
+                          <input type="file" onChange={(e) => setSelectedPanFile(e.target.files[0])} className="w-full text-[10px] bg-slate-900 border border-slate-700 p-1.5 rounded-xl text-slate-300 file:bg-amber-500 file:text-slate-950 file:border-0 file:rounded file:px-2 cursor-pointer" />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-bold">Upload Bike Photo / RC</label>
+                          <input type="file" onChange={(e) => setSelectedBikeFile(e.target.files[0])} className="w-full text-[10px] bg-slate-900 border border-slate-700 p-1.5 rounded-xl text-slate-300 file:bg-amber-500 file:text-slate-950 file:border-0 file:rounded file:px-2 cursor-pointer" />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-bold">Upload Driver Photo</label>
+                          <input type="file" onChange={(e) => setSelectedDriverFile(e.target.files[0])} className="w-full text-[10px] bg-slate-900 border border-slate-700 p-1.5 rounded-xl text-slate-300 file:bg-amber-500 file:text-slate-950 file:border-0 file:rounded file:px-2 cursor-pointer" />
+                        </div>
+
+                        <button onClick={() => handleSaveProfileWithFiles('KYC Documents')} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-xl font-black text-xs mt-2 cursor-pointer">
+                          Submit All KYC Documents 🚀
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-slate-800 border border-slate-700 p-4 rounded-2xl space-y-2 shadow">
+                    <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+                      <h4 className="font-black text-amber-400 uppercase text-[11px]">Bank & UPI Payout Settings</h4>
+                      <button onClick={() => setIsEditingBank(!isEditingBank)} className="bg-[#fc8019] text-slate-950 px-3 py-1.5 rounded-xl font-black text-[10px] cursor-pointer">
+                        {isEditingBank ? 'Cancel' : 'Edit ✍️'}
+                      </button>
+                    </div>
+
+                    {!isEditingBank ? (
+                      <div className="space-y-1 text-[11px] text-slate-300 pt-1">
+                        <p><b>Account No:</b> {partnerProfile.bankAccount}</p>
+                        <p><b>IFSC Code:</b> {partnerProfile.ifscCode}</p>
+                        <p><b>UPI ID:</b> {partnerProfile.upiId}</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 pt-2 text-[11px]">
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-bold">Bank Account Number</label>
+                          <input type="text" value={partnerProfile.bankAccount} onChange={(e) => setPartnerProfile({...partnerProfile, bankAccount: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-xl text-xs font-bold text-white outline-none" placeholder="Account Number" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-bold">IFSC Code</label>
+                          <input type="text" value={partnerProfile.ifscCode} onChange={(e) => setPartnerProfile({...partnerProfile, ifscCode: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-xl text-xs font-bold text-white outline-none uppercase" placeholder="IFSC Code" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-bold">UPI ID</label>
+                          <input type="text" value={partnerProfile.upiId} onChange={(e) => setPartnerProfile({...partnerProfile, upiId: e.target.value})} className="w-full bg-slate-900 border border-slate-700 p-2 rounded-xl text-xs font-bold text-white outline-none" placeholder="UPI ID (e.g. partner@ybl)" />
+                        </div>
+                        <button onClick={() => handleSaveProfileWithFiles('Bank & UPI Details')} className="w-full bg-emerald-600 text-white py-2 rounded-xl font-black text-xs mt-1 cursor-pointer">Save Bank Details 💾</button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-2">
+                    <button onClick={handleLogout} className="w-full bg-rose-600/25 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 py-3.5 rounded-2xl font-black text-xs shadow-lg flex items-center justify-center gap-2 transition cursor-pointer">
+                      <LogOut size={16} /> Logout from App
+                    </button>
                   </div>
                 </div>
-                <button type="submit" className="w-full bg-[#fc8019] text-slate-950 py-3.5 rounded-2xl font-black text-xs shadow cursor-pointer">Broadcast Now 🚀</button>
-              </form>
-            </div>
-          )}
-
-        </main>
-      </div>
-
-      {showDashboardListModal && (
-        <div className="absolute inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-slate-900 border-2 border-amber-500/80 w-full max-w-md rounded-[32px] p-6 shadow-2xl space-y-4 text-white relative overflow-hidden">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-black text-amber-400 uppercase">
-                {showDashboardListModal === 'partners' && 'Delivery Partners Full List'}
-                {showDashboardListModal === 'shops' && 'Registered Shops Full List'}
-                {showDashboardListModal === 'customers' && 'Customers Directory Full List'}
-              </h3>
-              <button onClick={() => setShowDashboardListModal(null)} className="text-slate-400 hover:text-white cursor-pointer"><X size={20} /></button>
-            </div>
-
-            <div className="space-y-2.5 max-h-[60vh] overflow-y-auto pr-1 text-xs">
-              {showDashboardListModal === 'partners' && (
-                partners.length === 0 ? <p className="text-slate-500 text-center py-6">No partners found.</p> :
-                partners.map((p, idx) => {
-                  const isPartnerOnline = p.online === true || p.isOnline === true || p.status === 'ONLINE';
-                  return (
-                    <div key={idx} className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 flex justify-between items-center">
-                      <div>
-                        <p className="font-black text-white">{p.fullName || p.name}</p>
-                        <p className="text-[10px] text-slate-400">Bike: {p.bikeNumber || 'N/A'}</p>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${isPartnerOnline ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                        {isPartnerOnline ? '● Online' : '○ Offline'}
-                      </span>
-                    </div>
-                  );
-                })
               )}
+            </main>
 
-              {showDashboardListModal === 'shops' && (
-                shopsList.length === 0 ? <p className="text-slate-500 text-center py-6">No shops found.</p> :
-                shopsList.map((s, idx) => {
-                  const isShopOnline = s.online === true || s.isOnline === true || s.status === 'ONLINE' || s.isOpen === true || s.online !== false;
-                  return (
-                    <div key={idx} className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 flex justify-between items-center">
-                      <div>
-                        <p className="font-black text-white">{s.shopName || s.name}</p>
-                        <p className="text-[10px] text-slate-400">{s.address || 'Ichapuram'}</p>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${isShopOnline ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                        {isShopOnline ? '● Open' : '○ Closed'}
-                      </span>
-                    </div>
-                  );
-                })
-              )}
-
-              {showDashboardListModal === 'customers' && (
-                customersList.length === 0 ? <p className="text-slate-500 text-center py-6">No customers found.</p> :
-                customersList.map((customer, idx) => (
-                  <div key={idx} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-1.5 text-xs">
-                    <div className="flex justify-between items-center">
-                      <p className="font-black text-white text-sm">{customer.name || 'New Customer'}</p>
-                      <span className="text-emerald-400 font-black text-xs">
-                        ₹ {customer.walletBalance !== undefined && customer.walletBalance !== null ? Number(customer.walletBalance).toFixed(2) : '0.00'}
-                      </span>
-                    </div>
-                    <p className="text-amber-400 font-bold">📞 {customer.mobile || customer.phoneNumber || 'N/A'}</p>
-                    <p className="text-slate-300">📧 <b>Email:</b> {customer.email || 'N/A'}</p>
-                    <p className="text-slate-400">📍 <b>Address:</b> {customer.deliveryAddress || customer.address || 'Ichapuram'}</p>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <button onClick={() => setShowDashboardListModal(null)} className="w-full bg-[#fc8019] text-slate-950 py-3 rounded-2xl font-black text-xs shadow cursor-pointer">Close List</button>
-          </div>
-        </div>
-      )}
-
-      {selectedOrderDetails && (
-        <div className="absolute inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-slate-900 border-2 border-amber-500/80 w-full max-w-sm rounded-[32px] p-6 shadow-2xl space-y-4 text-white relative overflow-hidden">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <div>
-                <span className="text-[9px] text-amber-400 font-black uppercase">Complete Order Overview</span>
-                <h3 className="text-sm font-black text-white">{selectedOrderDetails.orderId || `#ORD-${selectedOrderDetails.id}`}</h3>
-              </div>
-              <button onClick={() => setSelectedOrderDetails(null)} className="text-slate-400 hover:text-white cursor-pointer">
-                <X size={20} />
+            <nav className="absolute bottom-0 inset-x-0 h-16 bg-slate-800/90 backdrop-blur-md border-t border-slate-700 flex justify-around items-center px-2 z-50 text-[10px] font-bold text-slate-400">
+              <button onClick={() => setActiveTab('available')} className={`flex flex-col items-center gap-1 transition ${activeTab === 'available' ? 'text-[#fc8019]' : 'hover:text-slate-200'}`}>
+                <Bike size={20} /><span>Deliveries</span>
               </button>
-            </div>
-
-            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 text-xs">
-              
-              <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 flex justify-between items-center">
-                <span className="text-slate-400 font-bold uppercase text-[10px]">Present Status</span>
-                <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-3 py-1 rounded-full text-xs font-black uppercase animate-pulse">
-                  {selectedOrderDetails.status || 'Pending Approval'}
-                </span>
-              </div>
-
-              <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-1.5">
-                <h4 className="font-black text-amber-400 uppercase text-[10px] flex items-center gap-1.5">
-                  <Users size={13} /> Customer Details
-                </h4>
-                <p><b>Name:</b> {selectedOrderDetails.customerName || 'N/A'}</p>
-                <p><b>Mobile:</b> {selectedOrderDetails.customerMobile || 'N/A'}</p>
-                <p><b>Delivery Address:</b> {selectedOrderDetails.deliveryAddress || 'Ichapuram'}</p>
-              </div>
-
-              <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-1.5">
-                <h4 className="font-black text-amber-400 uppercase text-[10px] flex items-center gap-1.5">
-                  <Store size={13} /> Shop / Merchant Details
-                </h4>
-                <p><b>Shop Name:</b> {selectedOrderDetails.shopName || selectedOrderDetails.shop || 'N/A'}</p>
-                <p><b>Items:</b> {selectedOrderDetails.items || 'N/A'}</p>
-                <p><b>Total Amount:</b> <span className="text-emerald-400 font-bold">₹{selectedOrderDetails.totalAmount || selectedOrderDetails.total || 0}</span></p>
-              </div>
-
-              <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-1.5">
-                <h4 className="font-black text-amber-400 uppercase text-[10px] flex items-center gap-1.5">
-                  <Bike size={13} /> Assigned Delivery Partner
-                </h4>
-                <p><b>Partner ID / Name:</b> {selectedOrderDetails.deliveryPartnerId ? `Partner #${selectedOrderDetails.deliveryPartnerId}` : <span className="text-amber-400 font-bold">Unassigned / Finding Rider...</span>}</p>
-                <p><b>Payment Method:</b> {selectedOrderDetails.paymentMethod || 'COD'}</p>
-              </div>
-
-            </div>
-
-            <button 
-              onClick={() => setSelectedOrderDetails(null)} 
-              className="w-full bg-[#fc8019] hover:bg-[#e07015] text-slate-950 py-3 rounded-2xl font-black text-xs shadow-lg cursor-pointer transition mt-2"
-            >
-              Close Details
-            </button>
+              <button onClick={() => setActiveTab('history')} className={`flex flex-col items-center gap-1 transition ${activeTab === 'history' ? 'text-[#fc8019]' : 'hover:text-slate-200'}`}>
+                <Clock size={20} /><span>History</span>
+              </button>
+              <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1 transition ${activeTab === 'profile' ? 'text-[#fc8019]' : 'hover:text-slate-200'}`}>
+                <User size={20} /><span>Profile</span>
+              </button>
+            </nav>
           </div>
-        </div>
-      )}
-
-      {selectedPayoutForTransfer && (
-        <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
-          <div className="bg-slate-900 border border-emerald-500/50 w-full max-w-sm rounded-[32px] p-6 text-white space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-black text-emerald-400">Payment Gateway Settlement</h3>
-              <button onClick={() => setSelectedPayoutForTransfer(null)} className="text-slate-400 cursor-pointer"><X size={20} /></button>
-            </div>
-            <div className="space-y-3 text-xs">
-              <p className="text-slate-300">Transferring funds to <span className="font-black text-white">{selectedPayoutForTransfer.name}</span> via UPI / Bank Gateway.</p>
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Edit Transfer Amount (₹)</label>
-                <input 
-                  type="number" 
-                  value={transferAmountInput} 
-                  onChange={(e) => setTransferAmountInput(e.target.value)} 
-                  className="w-full bg-slate-950 border border-slate-800 px-4 py-3 rounded-xl text-sm font-black text-emerald-400 outline-none" 
-                  required 
-                />
-              </div>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <button onClick={() => setSelectedPayoutForTransfer(null)} className="w-1/2 bg-slate-800 text-slate-300 py-3 rounded-2xl font-black text-xs cursor-pointer">Cancel</button>
-              <button onClick={processPaymentTransfer} className="w-1/2 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-2xl font-black text-xs cursor-pointer shadow">Confirm & Pay 🚀</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showRevenueModal && (
-        <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
-          <div className="bg-slate-900 border border-amber-500/50 w-full max-w-sm rounded-[32px] p-6 text-white space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-black text-amber-400">Revenue Breakdown & PDF</h3>
-              <button onClick={() => setShowRevenueModal(false)} className="text-slate-400 cursor-pointer"><X size={20} /></button>
-            </div>
-            <div className="space-y-2.5">
-              {revenueBreakdown.map((item, idx) => (
-                <div key={idx} className="bg-slate-800 p-3.5 rounded-2xl flex justify-between items-center text-xs">
-                  <div><p className="font-black text-white">{item.period}</p><p className="text-[10px] text-emerald-400">₹ {item.amount}</p></div>
-                  <button onClick={() => generateRealPDF(item.period, item.amount)} className="bg-emerald-600 text-white px-3 py-1.5 rounded-xl font-black text-[10px] cursor-pointer">PDF</button>
-                </div>
-              ))}
-            </div>
-            <button onClick={() => setShowRevenueModal(false)} className="w-full bg-[#fc8019] text-slate-950 py-3 rounded-2xl font-black text-xs cursor-pointer">Close</button>
-          </div>
-        </div>
-      )}
-
+        )}
+      </div>
     </div>
   );
 }

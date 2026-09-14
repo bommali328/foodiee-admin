@@ -16,7 +16,7 @@ const AdminChatDashboard = () => {
     useEffect(() => {
         fetchConversations();
         
-        const socket = new SockJS('[http://Foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com](http://Foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com)/ws-foodiee');
+        const socket = new SockJS('[https://Foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com](https://Foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com)/ws-foodiee');
         const stompClient = Stomp.over(socket);
         stompClient.debug = () => {}; 
         stompClientRef.current = stompClient;
@@ -34,7 +34,7 @@ const AdminChatDashboard = () => {
 
     const fetchConversations = async () => {
         try {
-            const res = await axios.get('[http://Foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com](http://Foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com)/api/chat/admin/conversations');
+            const res = await axios.get('[https://Foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com](https://Foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com)/api/chat/admin/conversations');
             const uniqueCustomers = Array.from(new Set(res.data.map(m => m.senderMobile)))
                 .map(mobile => {
                     const msg = res.data.find(m => m.senderMobile === mobile);
@@ -49,7 +49,7 @@ const AdminChatDashboard = () => {
     const selectCustomerForChat = (customer) => {
         setSelectedCustomer(customer);
         
-        axios.get(`[http://Foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com](http://Foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com)/api/chat/history/${customer.mobile}`)
+        axios.get(`[https://Foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com](https://Foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com)/api/chat/history/${customer.mobile}`)
             .then(res => setMessages(res.data))
             .catch(err => console.error("Error loading history", err));
 
