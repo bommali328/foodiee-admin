@@ -4,7 +4,7 @@ import { Client } from "@stomp/stompjs";
 import axios from "axios";
 import { Send, User, MessageSquare, ShieldCheck, Paperclip, Store, Bike } from "lucide-react";
 
-const API_BASE_URL = "https://Foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com";
+const API_BASE_URL = "https://foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com";
 
 const AdminChatDashboard = () => {
     const [activeTab, setActiveTab] = useState('customer'); // 'customer', 'partner', 'shop'
