@@ -306,7 +306,7 @@ export default function AdminApp() {
           toast.error("అడ్మిన్ మెసేజ్ పంపడం విఫలమైంది");
         }
       } else {
-        // కస్టమర్ల కోసం సాధారణ చాట్ పేలోడ్
+        
         const payload = {
           orderId: String(identifier),
           senderMobile: String(identifier),
