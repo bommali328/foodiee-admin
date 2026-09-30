@@ -278,7 +278,8 @@ export default function AdminApp() {
 
     try {
       if (isPartnerOrShop) {
-        // ✅ షాప్ లేదా పార్ట్‌నర్ కోసం అడ్మిన్ పంపే పేలోడ్
+        // ✅ షాప్ లేదా పార్ట్‌నర్ కోసం అడ్మిన్ పంపే పేలోడ్ 
+        
         const payload = {
           identifier: String(identifier),
           partnerMobile: String(identifier),
