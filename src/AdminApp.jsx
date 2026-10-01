@@ -21,6 +21,14 @@ let DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon; 
 
 export default function AdminApp() {
+
+  // ✅ 1. Admin Login Security States (ఇక్కడ యాడ్ చేయండి)
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(() => {
+    return localStorage.getItem('foodieeAdminAuth') === 'true';
+  });
+  const [adminLoginPasswordInput, setAdminLoginPasswordInput] = useState('');
+  const [adminLoginError, setAdminLoginError] = useState('');
+
   const [activeTab, setActiveTab] = useState('dashboard');
   
   const [dashboardStats, setDashboardStats] = useState({ totalRevenue: 0.00, activeOrders: 0, netCommission: 0.00 });
@@ -71,6 +79,50 @@ export default function AdminApp() {
   const [adminSelectedFile, setAdminSelectedFile] = useState(null); // ✅ Admin Image/File State
   const adminStompClientRef = useRef(null);
   const messagesEndRef = useRef(null);
+
+  // --- ADMIN PASSWORD SETUP & LOGIN HANDLER ---
+  const handleAdminAuthSubmit = (e) => {
+    e.preventDefault();
+    if (!adminCustomPassword) {
+      if (passwordInput.length < 6) {
+        setLoginError("❌ పాస్‌వర్డ్ కనీసం 6 క్యారెక్టర్లు ఉండాలి.");
+        return;
+      }
+      if (passwordInput !== confirmPasswordInput) {
+        setLoginError("❌ రెండు పాస్‌వర్డ్‌లు మ్యాచ్ అవ్వడం లేదు.");
+        return;
+      }
+      localStorage.setItem('foodieeAdminCustomPassword', passwordInput);
+      setAdminCustomPassword(passwordInput);
+      setIsAdminLoggedIn(true);
+      localStorage.setItem('foodieeAdminAuth', 'true');
+      toast.success("🔐 Admin Password Created Successfully!");
+    } else {
+      if (passwordInput === adminCustomPassword) {
+        setIsAdminLoggedIn(true);
+        localStorage.setItem('foodieeAdminAuth', 'true');
+        toast.success("🔓 Welcome to Admin Command Center!");
+      } else {
+        setLoginError("❌ తప్పు పాస్‌వర్డ్! మళ్లీ ప్రయత్నించండి.");
+        toast.error("Invalid Admin Password");
+      }
+    }
+  };
+
+  const handleAdminAppLogin = (e) => {
+    e.preventDefault();
+    const SECURE_ADMIN_PASSWORD = "Foodiee@Admin2026"; 
+
+    if (adminLoginPasswordInput === SECURE_ADMIN_PASSWORD) {
+      setIsAdminLoggedIn(true);
+      localStorage.setItem('foodieeAdminAuth', 'true');
+      toast.success("🔓 Admin Access Granted Successfully!");
+    } else {
+      setAdminLoginError("❌ తప్పు పాస్‌వర్డ్! దయచేసి సరైన పాస్‌వర్డ్ ఎంటర్ చేయండి.");
+      toast.error("Invalid Admin Password");
+    }
+  };
+   
 
   // 🔔 1. మెసేజ్ రాగానే బీప్ సౌండ్ ప్లే చేసే ఫంక్షన్
   const playNotificationSound = () => {
@@ -633,6 +685,54 @@ export default function AdminApp() {
       </div>
     ));
   };
+
+  // ✅ 3. ఒకవేళ అడ్మిన్ లాగిన్ అవకపోతే ఈ లాగిన్ స్క్రీన్ మాత్రమే కనిపిస్తుంది
+  if (!isAdminLoggedIn) {
+    return (
+      <div className="flex h-screen bg-slate-950 text-white font-sans items-center justify-center p-4">
+        <Toaster />
+        <div className="bg-slate-900 border-2 border-amber-500/50 w-full max-w-md rounded-[32px] p-8 shadow-2xl space-y-6 text-center animate-fadeIn relative overflow-hidden">
+          
+          <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-[#fc8019] to-amber-400 text-slate-950 flex items-center justify-center font-black text-2xl shadow-lg shadow-orange-500/30 mx-auto">
+            🔐
+          </div>
+
+          <div>
+            <h1 className="text-xl font-black text-white">Foodiee Secure Admin Portal</h1>
+            <p className="text-xs text-slate-400 mt-1">Ichapuram Command Center • High Security Mode</p>
+          </div>
+
+          <form onSubmit={handleAdminAppLogin} className="space-y-4 text-left">
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Enter Admin Security Password</label>
+              <input 
+                type="password" 
+                value={adminLoginPasswordInput} 
+                onChange={(e) => setAdminLoginPasswordInput(e.target.value)} 
+                placeholder="••••••••••••" 
+                className="w-full bg-slate-950 border border-slate-700/80 px-4 py-3.5 rounded-2xl text-xs font-bold text-white outline-none focus:border-amber-400 transition"
+                required 
+              />
+            </div>
+
+            {adminLoginError && (
+              <p className="text-xs text-rose-400 font-bold text-center">{adminLoginError}</p>
+            )}
+
+            <button 
+              type="submit" 
+              className="w-full bg-gradient-to-r from-[#fc8019] to-amber-500 text-slate-950 py-3.5 rounded-2xl font-black text-xs shadow-lg cursor-pointer hover:opacity-95 transition"
+            >
+              Unlock Admin Command 🚀
+            </button>
+          </form>
+
+          <p className="text-[10px] text-slate-500 font-bold">Authorized Personnel Only • Encrypted Session</p>
+        </div>
+      </div>
+    );
+  }
+
 
   return (
     <div className="flex h-screen bg-slate-950 text-white font-sans overflow-hidden">
