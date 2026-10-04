@@ -3,7 +3,8 @@ import { Send, Image as ImageIcon, Bell, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 // ✅ BASE URL UPDATE (AWS)
-const API_BASE_URL = "https://foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com";
+// పాతది తీసేసి ఇది పెట్టండి:
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://api.foodiee.shop";
 
 export default function AdminBroadcast() {
   const [targetAudience, setTargetAudience] = useState('All Users');

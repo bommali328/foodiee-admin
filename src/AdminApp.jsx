@@ -9,7 +9,7 @@ import L from 'leaflet';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
-const API_BASE_URL = "https://foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://api.foodiee.shop";
 
 
 let DefaultIcon = L.icon({

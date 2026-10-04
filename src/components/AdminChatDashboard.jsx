@@ -4,7 +4,8 @@ import { Client } from "@stomp/stompjs";
 import axios from "axios";
 import { Send, User, MessageSquare, ShieldCheck, Paperclip, Store, Bike } from "lucide-react";
 
-const API_BASE_URL = "https://foodiee-backend-env.eba-5d9p6wzb.eu-north-1.elasticbeanstalk.com";
+// పాతది తీసేసి ఇది పెట్టండి:
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://api.foodiee.shop";
 
 const AdminChatDashboard = () => {
     const [activeTab, setActiveTab] = useState('customer'); // 'customer', 'partner', 'shop'
