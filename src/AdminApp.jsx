@@ -546,6 +546,26 @@ export default function AdminApp() {
     }, 1500);
   };
 
+  // ✅ డెలివరీ పార్టనర్ KYC వెరిఫై లేదా రిజెక్ట్ చేసే హ్యాండ్లర్
+  const handleVerifyKyc = async (partnerId, newStatus) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/partner/kyc/verify/${partnerId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kycStatus: newStatus })
+      });
+      
+      if (res.ok) {
+        toast.success(`✓ Partner KYC status updated to ${newStatus}`);
+        fetchAllAdminData(); // డేటాను రిఫ్రెష్ చేయడానికి
+      } else {
+        toast.error('❌ Failed to update KYC status');
+      }
+    } catch (err) {
+      toast.error('❌ Network error during KYC update');
+    }
+  };
+
   const addPromoCode = async (e) => {
     e.preventDefault();
     if (newCode.trim() && newDiscount.trim() && newMinOrder.trim()) {
@@ -575,6 +595,7 @@ export default function AdminApp() {
       setNewMinOrder('');
     }
   };
+
 
   const togglePromoStatus = async (index) => {
     const target = promoCodes[index];
