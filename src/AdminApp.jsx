@@ -617,7 +617,7 @@ export default function AdminApp() {
     }
   };
 
-  const sendBroadcast = async (e) => {
+ const sendBroadcast = async (e) => {
     e.preventDefault();
     if (broadcastMsg.trim()) {
       const formData = new FormData();
@@ -628,17 +628,21 @@ export default function AdminApp() {
       }
 
       try {
-        await fetch(`${API_BASE_URL}/api/admin/broadcast`, {
+        const response = await fetch(`${API_BASE_URL}/api/admin/broadcast`, {
           method: "POST",
           body: formData
         });
-        toast.success(`🚀 Broadcast push alert sent to [${broadcastTarget}]!`);
-        setBroadcastMsg('');
-        setBroadcastImageFile(null);
+        
+        if (response.ok) {
+          toast.success(`🚀 Broadcast push alert sent to [${broadcastTarget}]!`);
+          setBroadcastMsg('');
+          setBroadcastImageFile(null);
+        } else {
+          toast.error("❌ Failed to send broadcast alert");
+        }
       } catch (err) {
-        toast.success(`🚀 Broadcast sent to [${broadcastTarget}]!`);
-        setBroadcastMsg('');
-        setBroadcastImageFile(null);
+        console.error("Broadcast network error:", err);
+        toast.error("❌ Network error during broadcast");
       }
     }
   };
