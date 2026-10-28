@@ -22,7 +22,6 @@ L.Marker.prototype.options.icon = DefaultIcon;
 
 export default function AdminApp() {
 
-  // ✅ 1. Admin Login Security States (ఇక్కడ యాడ్ చేయండి)
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(() => {
     return localStorage.getItem('foodieeAdminAuth') === 'true';
   });
@@ -38,7 +37,6 @@ export default function AdminApp() {
   const [allOrders, setAllOrders] = useState([]);
   const [dailyCommissionLog, setDailyCommissionLog] = useState([]);
 
-  // --- PASSWORD VISIBILITY & EDIT STATES FOR USERS/SHOPS ---
   const [visiblePasswords, setVisiblePasswords] = useState({});
   const [editingPasswordId, setEditingPasswordId] = useState(null);
   const [newPasswordInput, setNewPasswordInput] = useState('');
@@ -67,47 +65,19 @@ export default function AdminApp() {
   const [geoRadius, setGeoRadius] = useState(12);
   const [loyaltyMembers, setLoyaltyMembers] = useState([]);
 
+  // ✅ Broadcast States with Header, Description & Image
+  const [broadcastTitle, setBroadcastTitle] = useState('');
   const [broadcastMsg, setBroadcastMsg] = useState('');
   const [broadcastTarget, setBroadcastTarget] = useState('All Users');
   const [broadcastImageFile, setBroadcastImageFile] = useState(null);
 
-  // --- ADMIN MULTI-CATEGORY DIRECT CHAT STATES ---
-  const [chatCategoryTab, setChatCategoryTab] = useState('customers'); // 'customers', 'partners', 'shops'
+  const [chatCategoryTab, setChatCategoryTab] = useState('customers'); 
   const [activeChatUser, setActiveChatUser] = useState(null);
   const [adminChatMessages, setAdminChatMessages] = useState([]);
   const [adminChatInput, setAdminChatInput] = useState('');
-  const [adminSelectedFile, setAdminSelectedFile] = useState(null); // ✅ Admin Image/File State
+  const [adminSelectedFile, setAdminSelectedFile] = useState(null); 
   const adminStompClientRef = useRef(null);
   const messagesEndRef = useRef(null);
-
-  // --- ADMIN PASSWORD SETUP & LOGIN HANDLER ---
-  const handleAdminAuthSubmit = (e) => {
-    e.preventDefault();
-    if (!adminCustomPassword) {
-      if (passwordInput.length < 6) {
-        setLoginError("❌ పాస్‌వర్డ్ కనీసం 6 క్యారెక్టర్లు ఉండాలి.");
-        return;
-      }
-      if (passwordInput !== confirmPasswordInput) {
-        setLoginError("❌ రెండు పాస్‌వర్డ్‌లు మ్యాచ్ అవ్వడం లేదు.");
-        return;
-      }
-      localStorage.setItem('foodieeAdminCustomPassword', passwordInput);
-      setAdminCustomPassword(passwordInput);
-      setIsAdminLoggedIn(true);
-      localStorage.setItem('foodieeAdminAuth', 'true');
-      toast.success("🔐 Admin Password Created Successfully!");
-    } else {
-      if (passwordInput === adminCustomPassword) {
-        setIsAdminLoggedIn(true);
-        localStorage.setItem('foodieeAdminAuth', 'true');
-        toast.success("🔓 Welcome to Admin Command Center!");
-      } else {
-        setLoginError("❌ తప్పు పాస్‌వర్డ్! మళ్లీ ప్రయత్నించండి.");
-        toast.error("Invalid Admin Password");
-      }
-    }
-  };
 
   const handleAdminAppLogin = (e) => {
     e.preventDefault();
@@ -122,9 +92,7 @@ export default function AdminApp() {
       toast.error("Invalid Admin Password");
     }
   };
-   
 
-  // 🔔 1. మెసేజ్ రాగానే బీప్ సౌండ్ ప్లే చేసే ఫంక్షన్
   const playNotificationSound = () => {
     try {
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -132,8 +100,8 @@ export default function AdminApp() {
       const gainNode = audioCtx.createGain();
       
       oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5 tone
-      oscillator.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1); // A5 tone
+      oscillator.frequency.setValueAtTime(587.33, audioCtx.currentTime); 
+      oscillator.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1); 
       
       gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
@@ -161,7 +129,7 @@ export default function AdminApp() {
     }
   };
 
- useEffect(() => {
+  useEffect(() => {
     fetchAllAdminData();
 
     const socket = new SockJS(`${API_BASE_URL}/ws-foodiee`);
@@ -202,7 +170,6 @@ export default function AdminApp() {
           const chatData = JSON.parse(message.body);
           const senderMob = chatData.senderMobile || chatData.partnerMobile || chatData.mobile;
           
-          // ఒకవేళ అడ్మిన్ ప్రస్తుతం అదే యూజర్ చాట్ విండోలో ఉంటే డాట్ చూపించకూడదు
           const isCurrentlyChatting = activeChatUser && (
             String(activeChatUser.mobile || activeChatUser.phoneNumber || '').trim() === String(senderMob).trim()
           );
@@ -212,7 +179,6 @@ export default function AdminApp() {
             playNotificationSound(); 
             toast.success(`💬 కొత్త సపోర్ట్ మెసేజ్ వచ్చింది!`);
             
-            // ✅ కస్టమర్, పార్ట్‌నర్ లేదా షాప్ లిస్ట్‌లో unreadCount శాశ్వతంగా అలాగే ఉండేలా అప్‌డేట్ చేయడం
             setCustomersList(prev => prev.map(c => 
               (String(c.mobile || c.phoneNumber).trim() === String(senderMob).trim()) 
                 ? { ...c, unreadCount: (c.unreadCount || 0) + 1, lastMessage: chatData.message, timestamp: chatData.timestamp } 
@@ -238,15 +204,13 @@ export default function AdminApp() {
     stompClient.activate();
 
     return () => {
-      // ✅ ఇక్కడ `clearInterval(interval)` ని తొలగించి కేవలం వెబ్‌సాకెట్ డీయాక్టివేషన్ ఉంచాము
       if (stompClient) stompClient.deactivate();
     };
   }, []);
- // ✅ Real-time Chat Subscription for Active User
+
   useEffect(() => {
     if (!activeChatUser) return;
     
-    // మొబైల్ నంబర్ లేదా ఐడి నుండి `+` మరియు స్పేస్‌లను పూర్తిగా క్లీన్ చేయడం
     const rawIdentifier = activeChatUser.mobile || activeChatUser.phoneNumber || activeChatUser.mobileNumber || activeChatUser.id;
     const identifier = rawIdentifier ? String(rawIdentifier).replace(/[\+\s]/g, '') : '';
     
@@ -299,7 +263,6 @@ export default function AdminApp() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [adminChatMessages]);
 
-  // ✅ Admin File Uploader Handler
   const handleAdminFileUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -312,11 +275,10 @@ export default function AdminApp() {
     }
   };
   
- const sendAdminDirectMessage = async () => {
+  const sendAdminDirectMessage = async () => {
     if (!adminChatInput.trim() && !adminSelectedFile) return;
     if (!activeChatUser) return;
     
-    // యూజర్ యొక్క మొబైల్ నంబర్‌ని క్లీన్ చేయడం
     const rawIdentifier = activeChatUser.mobile || activeChatUser.phoneNumber || activeChatUser.mobileNumber || activeChatUser.id;
     const identifier = rawIdentifier ? String(rawIdentifier).replace(/[\+\s]/g, '').replace(/^91/, '') : '';
     
@@ -331,8 +293,6 @@ export default function AdminApp() {
 
     try {
       if (isPartnerOrShop) {
-        // ✅ షాప్ లేదా పార్ట్‌నర్ కోసం అడ్మిన్ పంపే పేలోడ్ 
-
         const payload = {
           identifier: String(identifier),
           partnerMobile: String(identifier),
@@ -351,16 +311,13 @@ export default function AdminApp() {
 
         if (response.ok) {
           const savedMsg = await response.json();
-          // లోకల్ స్టేట్‌లో వెంటనే అప్‌డేట్ చేయడం వల్ల అడ్మిన్ స్క్రీన్‌పై మెసేజ్ వెంటనే కనిపిస్తుంది
           setAdminChatMessages(prev => [...(Array.isArray(prev) ? prev : []), savedMsg]);
-          
           setAdminChatInput('');
           setAdminSelectedFile(null);
         } else {
           toast.error("అడ్మిన్ మెసేజ్ పంపడం విఫలమైంది");
         }
       } else {
-        
         const payload = {
           orderId: String(identifier),
           senderMobile: String(identifier),
@@ -379,7 +336,6 @@ export default function AdminApp() {
         if (response.ok) {
           const savedMsg = await response.json();
           setAdminChatMessages(prev => [...(Array.isArray(prev) ? prev : []), savedMsg]);
-          
           setAdminChatInput('');
           setAdminSelectedFile(null);
         } else {
@@ -391,7 +347,7 @@ export default function AdminApp() {
     }
   };
 
- const fetchAllAdminData = async () => {
+  const fetchAllAdminData = async () => {
     try {
       const shopRes = await fetch(`${API_BASE_URL}/api/shop/all`);
       if (shopRes.ok) {
@@ -546,26 +502,6 @@ export default function AdminApp() {
     }, 1500);
   };
 
-  // ✅ డెలివరీ పార్టనర్ KYC వెరిఫై లేదా రిజెక్ట్ చేసే హ్యాండ్లర్
-  const handleVerifyKyc = async (partnerId, newStatus) => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/admin/partner/kyc/verify/${partnerId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kycStatus: newStatus })
-      });
-      
-      if (res.ok) {
-        toast.success(`✓ Partner KYC status updated to ${newStatus}`);
-        fetchAllAdminData(); // డేటాను రిఫ్రెష్ చేయడానికి
-      } else {
-        toast.error('❌ Failed to update KYC status');
-      }
-    } catch (err) {
-      toast.error('❌ Network error during KYC update');
-    }
-  };
-
   const addPromoCode = async (e) => {
     e.preventDefault();
     if (newCode.trim() && newDiscount.trim() && newMinOrder.trim()) {
@@ -596,7 +532,6 @@ export default function AdminApp() {
     }
   };
 
-
   const togglePromoStatus = async (index) => {
     const target = promoCodes[index];
     const newStatus = target.isActive === false ? true : false;
@@ -617,11 +552,13 @@ export default function AdminApp() {
     }
   };
 
- const sendBroadcast = async (e) => {
+  // ✅ Updated sendBroadcast function with Title, Body and Image
+  const sendBroadcast = async (e) => {
     e.preventDefault();
-    if (broadcastMsg.trim()) {
+    if (broadcastMsg.trim() && broadcastTitle.trim()) {
       const formData = new FormData();
       formData.append("target", broadcastTarget);
+      formData.append("title", broadcastTitle);
       formData.append("message", broadcastMsg);
       if (broadcastImageFile) {
         formData.append("image", broadcastImageFile);
@@ -635,6 +572,7 @@ export default function AdminApp() {
         
         if (response.ok) {
           toast.success(`🚀 Broadcast push alert sent to [${broadcastTarget}]!`);
+          setBroadcastTitle('');
           setBroadcastMsg('');
           setBroadcastImageFile(null);
         } else {
@@ -644,6 +582,8 @@ export default function AdminApp() {
         console.error("Broadcast network error:", err);
         toast.error("❌ Network error during broadcast");
       }
+    } else {
+      toast.error("దయచేసి హెడర్ మరియు మెసేజ్ ఎంటర్ చేయండి");
     }
   };
 
@@ -666,7 +606,6 @@ export default function AdminApp() {
     toast.success("📄 Financial PDF Report Downloaded Successfully!");
   };
 
-  // ✅ WhatsApp Style Date Grouping Logic (Today & Last Dates)
   const renderGroupedChatMessages = (messagesList) => {
     const todayStr = new Date().toLocaleDateString();
     
@@ -692,13 +631,12 @@ export default function AdminApp() {
             <div key={mIdx} className={`flex flex-col ${isAdmin ? 'items-end' : 'items-start'} space-y-0.5`}>
               <div className={`max-w-[75%] p-3.5 rounded-2xl shadow-md text-xs relative ${
                 isAdmin 
-                  ? 'bg-[#005c4b] text-white rounded-br-none font-bold' // WhatsApp Outgoing Green
-                  : 'bg-[#202c33] text-white rounded-bl-none border border-slate-700/50' // WhatsApp Incoming Gray
+                  ? 'bg-[#005c4b] text-white rounded-br-none font-bold' 
+                  : 'bg-[#202c33] text-white rounded-bl-none border border-slate-700/50' 
               }`}>
                 <span className={`block text-[9px] uppercase font-black mb-1 ${isAdmin ? 'text-emerald-300' : 'text-[#fc8019]'}`}>
                   {msg.senderName || (isAdmin ? 'Super Admin' : activeChatUser?.fullName || activeChatUser?.name || 'User')}
                 </span>
-                {/* ✅ HTML tag / Image support rendering */}
                 <div className="text-xs font-medium leading-relaxed overflow-hidden" dangerouslySetInnerHTML={{ __html: msg.message }} />
                 <span className="block text-[8px] text-slate-400 text-right mt-1">
                   {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
@@ -711,7 +649,6 @@ export default function AdminApp() {
     ));
   };
 
-  // ✅ 3. ఒకవేళ అడ్మిన్ లాగిన్ అవకపోతే ఈ లాగిన్ స్క్రీన్ మాత్రమే కనిపిస్తుంది
   if (!isAdminLoggedIn) {
     return (
       <div className="flex h-screen bg-slate-950 text-white font-sans items-center justify-center p-4">
@@ -757,7 +694,6 @@ export default function AdminApp() {
       </div>
     );
   }
-
 
   return (
     <div className="flex h-screen bg-slate-950 text-white font-sans overflow-hidden">
@@ -974,7 +910,6 @@ export default function AdminApp() {
             </div>
           )}
 
-          {/* 🏪 SHOPS DIRECTORY TAB WITH PASSWORD VIEW & EDIT */}
           {activeTab === 'shops-directory' && (
             <div className="space-y-4 animate-fadeIn">
               <div className="flex justify-between items-center">
@@ -1065,7 +1000,6 @@ export default function AdminApp() {
             </div>
           )}
 
-          {/* 🛵 DELIVERY PARTNERS DIRECTORY TAB */}
           {activeTab === 'partners-directory' && (
             <div className="space-y-4 animate-fadeIn">
               <div className="flex justify-between items-center">
@@ -1632,7 +1566,6 @@ export default function AdminApp() {
             </div>
           )}
 
-          {/* 💬 WHATSAPP STYLE SUPPORT CHATS TAB */}
           {activeTab === 'chats' && (
             <div className="space-y-4 animate-fadeIn">
               <div>
@@ -1654,7 +1587,6 @@ export default function AdminApp() {
 
               <div className="flex h-[640px] bg-[#0b141a] border border-slate-800 rounded-[32px] overflow-hidden shadow-2xl">
                 
-                {/* Left Sidebar */}
                 <div className="w-1/3 bg-[#111b21] border-r border-slate-800 flex flex-col">
                   <div className="p-4 bg-[#202c33] border-b border-slate-800 flex items-center justify-between">
                     <span className="text-xs font-black text-white uppercase tracking-wider">Select {chatCategoryTab} to chat</span>
@@ -1682,7 +1614,6 @@ export default function AdminApp() {
                           className={`p-4 cursor-pointer transition flex items-center justify-between gap-3 ${activeChatUser?.id === c.id ? 'bg-[#2a3942] border-l-4 border-[#00a884]' : 'hover:bg-[#202c33]/50'}`}
                         >
                           <div className="flex items-center gap-3 min-w-0 flex-1">
-                            {/* 🟡 Blinking Dot for New Messages */}
                             <div className="w-10 h-10 rounded-2xl bg-[#00a884]/20 text-[#00a884] flex items-center justify-center font-black shrink-0 relative">
                               <Users size={18} />
                               {hasUnread && (
@@ -1698,7 +1629,6 @@ export default function AdminApp() {
                             </div>
                           </div>
 
-                          {/* 🔴 Last Message Time */}
                           <div className="flex flex-col items-end gap-1 shrink-0">
                             <span className="text-[10px] text-slate-400 font-bold">
                               {lastMsg && lastMsg.timestamp 
@@ -1763,65 +1693,60 @@ export default function AdminApp() {
                     })}
 
                    {chatCategoryTab === 'shops' && shopsList.map((s, idx) => {
-  const sMobile = s.mobile || s.mobileNumber;
-  const hasUnread = (s.unreadCount || 0) > 0;
-  
-  // ✅ ప్రతీ షాప్ ఆబ్జెక్ట్ నుండి నేరుగా లాస్ట్ మెసేజ్ టైమ్ తీసుకోవడం
-  const displayTime = s.timestamp 
-    ? new Date(s.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-    : '';
+                      const sMobile = s.mobile || s.mobileNumber;
+                      const hasUnread = (s.unreadCount || 0) > 0;
+                      
+                      const displayTime = s.timestamp 
+                        ? new Date(s.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                        : '';
 
-  return (
-    <div 
-      key={idx} 
-      onClick={() => {
-        setActiveChatUser(s);
-        // ✅ క్లిక్ చేయగానే ఆ షాప్ యొక్క unreadCount జీరో అయిపోతుంది
-        setShopsList(prev => prev.map(shop => 
-          (String(shop.mobile || shop.mobileNumber).trim() === String(sMobile).trim())
-            ? { ...shop, unreadCount: 0 }
-            : shop
-        ));
-      }} 
-      className={`p-4 cursor-pointer transition flex items-center justify-between gap-3 ${activeChatUser?.id === s.id ? 'bg-[#2a3942] border-l-4 border-[#00a884]' : 'hover:bg-[#202c33]/50'}`}
-    >
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <div className="w-10 h-10 rounded-2xl bg-[#00a884]/20 text-[#00a884] flex items-center justify-center font-black shrink-0 relative">
-          <Store size={18} />
-          {/* 🟢 కొత్త మెసేజ్ రాగానే బ్లింక్ అయ్యే డాట్ */}
-          {hasUnread && (
-            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#111b21] rounded-full animate-ping"></span>
-          )}
-          {hasUnread && (
-            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#111b21] rounded-full"></span>
-          )}
-        </div>
-        <div className="min-w-0">
-          <h4 className="text-xs font-black text-white truncate">{s.shopName || s.name || 'Shop'}</h4>
-          <p className="text-[10px] text-slate-400 font-bold truncate">
-            {s.lastMessage || `+91 ${sMobile || 'N/A'}`}
-          </p>
-        </div>
-      </div>
+                      return (
+                        <div 
+                          key={idx} 
+                          onClick={() => {
+                            setActiveChatUser(s);
+                            setShopsList(prev => prev.map(shop => 
+                              (String(shop.mobile || shop.mobileNumber).trim() === String(sMobile).trim())
+                                ? { ...shop, unreadCount: 0 }
+                                : shop
+                            ));
+                          }} 
+                          className={`p-4 cursor-pointer transition flex items-center justify-between gap-3 ${activeChatUser?.id === s.id ? 'bg-[#2a3942] border-l-4 border-[#00a884]' : 'hover:bg-[#202c33]/50'}`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="w-10 h-10 rounded-2xl bg-[#00a884]/20 text-[#00a884] flex items-center justify-center font-black shrink-0 relative">
+                              <Store size={18} />
+                              {hasUnread && (
+                                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#111b21] rounded-full animate-ping"></span>
+                              )}
+                              {hasUnread && (
+                                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#111b21] rounded-full"></span>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="text-xs font-black text-white truncate">{s.shopName || s.name || 'Shop'}</h4>
+                              <p className="text-[10px] text-slate-400 font-bold truncate">
+                                {s.lastMessage || `+91 ${sMobile || 'N/A'}`}
+                              </p>
+                            </div>
+                          </div>
 
-      {/* ⏱️ టైమ్‌స్టాంప్ మరియు unread కౌంట్ బ్యాడ్జ్ */}
-      <div className="flex flex-col items-end gap-1.5 shrink-0">
-        <span className={`text-[10px] font-bold ${hasUnread ? 'text-emerald-400' : 'text-slate-400'}`}>
-          {displayTime}
-        </span>
-        {hasUnread && (
-          <span className="w-5 h-5 bg-emerald-500 text-slate-950 font-black text-[10px] rounded-full flex items-center justify-center shadow-md animate-pulse">
-            {s.unreadCount}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-})}
+                          <div className="flex flex-col items-end gap-1.5 shrink-0">
+                            <span className={`text-[10px] font-bold ${hasUnread ? 'text-emerald-400' : 'text-slate-400'}`}>
+                              {displayTime}
+                            </span>
+                            {hasUnread && (
+                              <span className="w-5 h-5 bg-emerald-500 text-slate-950 font-black text-[10px] rounded-full flex items-center justify-center shadow-md animate-pulse">
+                                {s.unreadCount}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
-                {/* Right Side Chat Window */}
                 <div className="flex-1 flex flex-col bg-[#0b141a]">
                   {!activeChatUser ? (
                     <div className="flex flex-col items-center justify-center flex-1 text-slate-500 space-y-2">
@@ -1855,7 +1780,6 @@ export default function AdminApp() {
                         <div ref={messagesEndRef} />
                       </div>
 
-                      {/* ✅ Selected File Preview */}
                       {adminSelectedFile && (
                         <div className="px-4 py-2 bg-[#202c33] border-t border-slate-800 flex items-center justify-between text-xs">
                           <span className="text-amber-400 truncate max-w-[300px]">📎 {adminSelectedFile.name}</span>
@@ -1864,7 +1788,6 @@ export default function AdminApp() {
                       )}
 
                       <div className="p-3 bg-[#202c33] border-t border-slate-800 flex items-center gap-3">
-                        {/* ✅ Attachment paperclip button */}
                         <label className="text-slate-400 hover:text-white cursor-pointer p-2.5 rounded-xl bg-[#2a3942] border border-slate-700/50">
                           <Paperclip size={18} />
                           <input type="file" onChange={handleAdminFileUpload} className="hidden" accept="image/*,.pdf,.doc,.docx" />
@@ -1932,9 +1855,10 @@ export default function AdminApp() {
             </div>
           )}
 
+          {/* ✅ Updated Broadcast Tab with Title, Description and Image inputs */}
           {activeTab === 'broadcast' && (
             <div className="space-y-4 animate-fadeIn">
-              <h1 className="text-xl font-black text-white">Broadcast Push Notifications with Image</h1>
+              <h1 className="text-xl font-black text-white">Broadcast Push Notifications with Header & Image</h1>
               <form onSubmit={sendBroadcast} className="bg-slate-900 border border-slate-800 p-6 rounded-[32px] shadow-xl space-y-4 max-w-lg">
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Target Audience</label>
@@ -1942,10 +1866,17 @@ export default function AdminApp() {
                     <option>All Users</option><option>All Customers</option><option>All Shop Owners</option><option>All Delivery Partners</option>
                   </select>
                 </div>
+
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Announcement Message</label>
-                  <textarea rows={3} value={broadcastMsg} onChange={(e) => setBroadcastMsg(e.target.value)} placeholder="Type announcement..." className="w-full bg-slate-950 border border-slate-800 p-4 rounded-xl text-xs font-bold text-white outline-none" required></textarea>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Notification Header (Title)</label>
+                  <input type="text" value={broadcastTitle} onChange={(e) => setBroadcastTitle(e.target.value)} placeholder="e.g. 🎉 Diwali Special Offer" className="w-full bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-xs font-bold text-white outline-none" required />
                 </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Notification Description (Body)</label>
+                  <textarea rows={3} value={broadcastMsg} onChange={(e) => setBroadcastMsg(e.target.value)} placeholder="Type announcement description..." className="w-full bg-slate-950 border border-slate-800 p-4 rounded-xl text-xs font-bold text-white outline-none" required></textarea>
+                </div>
+
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Attach Promotional Image (Optional)</label>
                   <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-3 rounded-xl">
@@ -1953,6 +1884,7 @@ export default function AdminApp() {
                     <input type="file" accept="image/*" onChange={(e) => setBroadcastImageFile(e.target.files[0])} className="text-xs text-slate-300 file:bg-amber-500 file:text-slate-950 file:border-0 file:rounded-lg file:px-3 file:py-1 cursor-pointer w-full" />
                   </div>
                 </div>
+
                 <button type="submit" className="w-full bg-[#fc8019] text-slate-950 py-3.5 rounded-2xl font-black text-xs shadow cursor-pointer">Broadcast Now 🚀</button>
               </form>
             </div>
@@ -2119,7 +2051,6 @@ export default function AdminApp() {
 
       {selectedPayoutForTransfer && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
-          Apparel details...
           <div className="bg-slate-900 border border-emerald-500/50 w-full max-w-sm rounded-[32px] p-6 text-white space-y-4 shadow-2xl">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h3 className="text-sm font-black text-emerald-400">Payment Gateway Settlement</h3>
