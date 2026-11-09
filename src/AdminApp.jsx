@@ -37,6 +37,64 @@ export default function AdminApp() {
   const [allOrders, setAllOrders] = useState([]);
   const [dailyCommissionLog, setDailyCommissionLog] = useState([]);
 
+  const [step, setStep] = useState(1); // 👈 Step 1: Password, Step 2: 4-Digit OTP
+  const [enteredAdminOtp, setEnteredAdminOtp] = useState('');
+  const [whatsappRedirectLink, setWhatsappRedirectLink] = useState('');
+
+  // 1. పాస్‌వర్డ్ చెక్ చేసి WhatsApp కి OTP రిక్వెస్ట్ చేసే ఫంక్షన్
+  const handleRequestAdminOtp = async (e) => {
+    e.preventDefault();
+    setAdminLoginError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: adminLoginPasswordInput })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        toast.success("✓ 4-digit OTP sent to WhatsApp (7893521159) successfully!");
+        setStep(2); // 👈 ఇక్కడ స్టెప్ 2 కి మారి 4-డిజిట్ పిన్ బాక్స్ చూపిస్తుంది
+        if (data.whatsappRedirectUrl) {
+          setWhatsappRedirectLink(data.whatsappRedirectUrl);
+        }
+      } else {
+        toast.error(data.error || "Invalid Admin Password");
+        setAdminLoginError("❌ తప్పు పాస్‌వర్డ్! దయచేసి సరైన పాస్‌వర్డ్ ఎంటర్ చేయండి.");
+      }
+    } catch (err) {
+      toast.error("Network error during OTP request");
+      setAdminLoginError("❌ నెట్‌వర్క్ ఎర్రర్ ఏర్పడింది.");
+    }
+  };
+
+  // 2. WhatsApp నుండి వచ్చిన OTP వెరిఫై చేసి అడ్మిన్ పేజీ ఓపెన్ చేసే ఫంక్షన్
+  const handleVerifyAdminOtp = async (e) => {
+    e.preventDefault();
+    setAdminLoginError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otp: enteredAdminOtp })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setIsAdminLoggedIn(true);
+        localStorage.setItem('foodieeAdminAuth', 'true');
+        toast.success("🔓 Admin Access Granted Successfully via WhatsApp OTP!");
+      } else {
+        toast.error(data.error || "Invalid or Expired OTP");
+        setAdminLoginError(data.error || "❌ తప్పు OTP లేదా గడువు ముగిసింది!");
+      }
+    } catch (err) {
+      toast.error("Network error during OTP verification");
+      setAdminLoginError("❌ నెట్‌వర్క్ ఎర్రర్ ఏర్పడింది.");
+    }
+  };
+
   const [visiblePasswords, setVisiblePasswords] = useState({});
   const [editingPasswordId, setEditingPasswordId] = useState(null);
   const [newPasswordInput, setNewPasswordInput] = useState('');
@@ -661,35 +719,86 @@ export default function AdminApp() {
 
           <div>
             <h1 className="text-xl font-black text-white">Foodiee Secure Admin Portal</h1>
-            <p className="text-xs text-slate-400 mt-1">Ichapuram Command Center • High Security Mode</p>
+            <p className="text-xs text-slate-400 mt-1">Ichapuram Command Center • WhatsApp 2FA Security</p>
           </div>
 
-          <form onSubmit={handleAdminAppLogin} className="space-y-4 text-left">
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Enter Admin Security Password</label>
-              <input 
-                type="password" 
-                value={adminLoginPasswordInput} 
-                onChange={(e) => setAdminLoginPasswordInput(e.target.value)} 
-                placeholder="••••••••••••" 
-                className="w-full bg-slate-950 border border-slate-700/80 px-4 py-3.5 rounded-2xl text-xs font-bold text-white outline-none focus:border-amber-400 transition"
-                required 
-              />
-            </div>
+          {/* 🌟 స్టెప్ 1: పాస్‌వర్డ్ ఎంటర్ చేసే ఫారమ్ */}
+          {step === 1 ? (
+            <form onSubmit={handleRequestAdminOtp} className="space-y-4 text-left">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Enter Admin Security Password</label>
+                <input 
+                  type="password" 
+                  value={adminLoginPasswordInput} 
+                  onChange={(e) => setAdminLoginPasswordInput(e.target.value)} 
+                  placeholder="••••••••••••" 
+                  className="w-full bg-slate-950 border border-slate-700/80 px-4 py-3.5 rounded-2xl text-xs font-bold text-white outline-none focus:border-amber-400 transition"
+                  required 
+                />
+              </div>
 
-            {adminLoginError && (
-              <p className="text-xs text-rose-400 font-bold text-center">{adminLoginError}</p>
-            )}
+              {adminLoginError && (
+                <p className="text-xs text-rose-400 font-bold text-center">{adminLoginError}</p>
+              )}
 
-            <button 
-              type="submit" 
-              className="w-full bg-gradient-to-r from-[#fc8019] to-amber-500 text-slate-950 py-3.5 rounded-2xl font-black text-xs shadow-lg cursor-pointer hover:opacity-95 transition"
-            >
-              Unlock Admin Command 🚀
-            </button>
-          </form>
+              <button 
+                type="submit" 
+                className="w-full bg-gradient-to-r from-[#fc8019] to-amber-500 text-slate-950 py-3.5 rounded-2xl font-black text-xs shadow-lg cursor-pointer hover:opacity-95 transition"
+              >
+                Unlock Admin Command (Send OTP) 💬
+              </button>
+            </form>
+          ) : (
+            /* 🌟 స్టెప్ 2: పాస్‌వర్డ్ కరెక్ట్ అయితే కింద 4-అంకెల పిన్ (OTP) ఎంటర్ చేసే ఆప్షన్ బాక్స్ */
+            <form onSubmit={handleVerifyAdminOtp} className="space-y-4 text-left animate-fadeIn">
+              <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-2xl text-center">
+                <p className="text-[11px] text-amber-300 font-bold">📲 WhatsApp OTP Sent to 7893521159</p>
+                <p className="text-[9px] text-slate-400">గమనిక: ఈ పిన్ 5 నిమిషాల వరకు మాత్రమే పనిచేస్తుంది.</p>
+              </div>
 
-          <p className="text-[10px] text-slate-500 font-bold">Authorized Personnel Only • Encrypted Session</p>
+              <div>
+                <label className="block text-[10px] font-black text-amber-400 uppercase mb-1.5">Enter 4-Digit WhatsApp PIN / OTP</label>
+                <input 
+                  type="text" 
+                  maxLength="4"
+                  value={enteredAdminOtp} 
+                  onChange={(e) => setEnteredAdminOtp(e.target.value.replace(/\D/g, ''))} 
+                  placeholder="1234" 
+                  className="w-full bg-slate-950 border border-slate-700/80 px-4 py-3.5 rounded-2xl text-center text-2xl font-black text-amber-400 tracking-[0.5em] outline-none focus:border-amber-400 transition"
+                  required 
+                />
+              </div>
+
+              {whatsappRedirectLink && (
+                <div className="text-center">
+                  <a href={whatsappRedirectLink} target="_blank" rel="noreferrer" className="text-[11px] text-emerald-400 underline font-bold">
+                    Click here to open WhatsApp directly 📱
+                  </a>
+                </div>
+              )}
+
+              {adminLoginError && (
+                <p className="text-xs text-rose-400 font-bold text-center">{adminLoginError}</p>
+              )}
+
+              <button 
+                type="submit" 
+                className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-3.5 rounded-2xl font-black text-xs shadow-lg cursor-pointer hover:opacity-95 transition"
+              >
+                Verify & Open Admin Page 🚀
+              </button>
+
+              <button 
+                type="button" 
+                onClick={() => setStep(1)} 
+                className="w-full text-center text-xs text-slate-400 underline font-bold cursor-pointer pt-1"
+              >
+                ← Back to Password
+              </button>
+            </form>
+          )}
+
+          <p className="text-[10px] text-slate-500 font-bold">Authorized Personnel Only • Two-Factor Authentication</p>
         </div>
       </div>
     );
@@ -788,6 +897,21 @@ export default function AdminApp() {
             <button onClick={() => setActiveTab('broadcast')} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition cursor-pointer ${activeTab === 'broadcast' ? 'bg-[#fc8019] text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
               <BellRing size={15} /> Broadcast Push Alerts
             </button>
+
+            {/* 👇 ఇక్కడ లాగౌట్ బటన్‌ను పేస్ట్ చేయండి */}
+            <div className="pt-3 mt-3 border-t border-slate-800">
+              <button 
+                onClick={() => {
+                  localStorage.removeItem('foodieeAdminAuth');
+                  setIsAdminLoggedIn(false);
+                  setAdminLoginPasswordInput('');
+                  toast.success("✓ అడ్మిన్ విజయవంతంగా లాగౌట్ అయ్యారు!");
+                }} 
+                className="w-full bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 py-3 rounded-2xl font-black text-xs shadow-lg flex items-center justify-center gap-2 transition cursor-pointer"
+              >
+                🔒 Admin Logout
+              </button>
+            </div>
           </div>
         </nav>
       </aside>
@@ -1254,12 +1378,12 @@ export default function AdminApp() {
             </div>
           )}
 
-          {activeTab === 'shops' && (
+        {activeTab === 'shops' && (
             <div className="space-y-4 animate-fadeIn">
               <div className="flex justify-between items-center">
                 <div>
                   <h1 className="text-xl font-black text-white">4. Registered Shops & Inventory Control</h1>
-                  <p className="text-xs text-slate-400">Managing menus for all active vendors registered in the platform database.</p>
+                  <p className="text-xs text-slate-400">Managing menus and items for all active vendors registered in the platform database.</p>
                 </div>
                 <span className="text-xs bg-amber-500/25 text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full font-black">{shopsList.length} Stores</span>
               </div>
@@ -1268,30 +1392,70 @@ export default function AdminApp() {
                 shopsList.length === 0 ? (
                   <p className="text-xs text-slate-500 bg-slate-900 p-8 rounded-3xl text-center">No registered shops found in database.</p>
                 ) : (
-                  <div className="grid grid-cols-2 gap-4">
-                    {shopsList.map(shop => (
-                      <div key={shop.id} onClick={() => handleShopClick(shop)} className="bg-slate-900 border border-slate-800 p-5 rounded-[28px] cursor-pointer hover:border-[#fc8019] space-y-2">
-                        <h3 className="text-base font-black text-white">{shop.shopName || shop.name}</h3>
-                        <p className="text-xs text-slate-400">📍 {shop.address || 'Ichapuram Main Road'}</p>
-                        <p className="text-xs text-[#fc8019] font-bold">Owner: {shop.ownerName || shop.owner || 'Vendor'}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {shopsList.map((shop, idx) => (
+                      <div 
+                        key={shop.id || idx} 
+                        onClick={() => handleShopClick(shop)} 
+                        className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center gap-3 shadow-lg cursor-pointer hover:border-[#fc8019] transition"
+                      >
+                        <img 
+                          src={shop.imageUrl || "https://images.unsplash.com/photo-1555396273-367ea4eb4db5"} 
+                          alt={shop.shopName || shop.name} 
+                          className="w-14 h-14 rounded-xl object-cover border border-slate-700 shrink-0" 
+                        />
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-xs font-black text-white truncate">{shop.shopName || shop.name}</h4>
+                          <p className="text-[10px] text-amber-500 font-bold uppercase">{shop.category || 'Store'}</p>
+                          <span className="text-[9px] text-slate-400 truncate block">{shop.address || 'Ichapuram'}</span>
+                        </div>
+                        <ChevronRight size={16} className="text-amber-400 shrink-0" />
                       </div>
                     ))}
                   </div>
                 )
               ) : (
-                <div className="space-y-4">
-                  <button onClick={() => setSelectedShopForMenu(null)} className="text-xs font-bold text-slate-400 cursor-pointer">← Back to All Shops</button>
-                  <div className="bg-gradient-to-r from-[#fc8019] to-amber-500 text-slate-950 p-4 rounded-2xl">
-                    <h2 className="text-sm font-black">{selectedShopForMenu.shopName || selectedShopForMenu.name} - Menu Inventory</h2>
+                <div className="space-y-4 animate-fadeIn">
+                  <div className="flex items-center justify-between bg-slate-900 p-4 rounded-2xl border border-slate-800">
+                    <div>
+                      <button 
+                        onClick={() => { setSelectedShopForMenu(null); setShopMenuData([]); }}
+                        className="text-[10px] text-amber-400 font-bold underline cursor-pointer mb-1 block"
+                      >
+                        ← Back to All Shops List
+                      </button>
+                      <h3 className="text-sm font-black text-white">Menu Items for: {selectedShopForMenu.shopName || selectedShopForMenu.name}</h3>
+                    </div>
+                    <span className="text-xs bg-amber-500/20 text-amber-400 px-3 py-1 rounded-full font-black">
+                      {selectedShopForMenu.category || 'Store'}
+                    </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                     {shopMenuData.length === 0 ? (
-                      <p className="text-xs text-slate-400 py-8 text-center col-span-2">No menu items added by this vendor yet.</p>
+                      <div className="text-center py-16 bg-slate-900 rounded-2xl border border-slate-800 space-y-2 col-span-full">
+                        <span className="text-2xl">🍽️</span>
+                        <p className="text-xs text-slate-400 font-bold">No menu items added by this vendor yet.</p>
+                      </div>
                     ) : (
                       shopMenuData.map((item, idx) => (
-                        <div key={idx} className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex justify-between items-center text-xs">
-                          <div><p className="font-black text-white">{item.itemName || item.name}</p><p className="text-emerald-400 font-bold">₹ {item.price}</p></div>
-                          <button onClick={() => toggleItemStock(idx)} className={`px-3 py-1.5 rounded-xl font-black text-[10px] cursor-pointer ${item.inStock !== false ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                        <div key={item.id || idx} className="bg-slate-900 border border-slate-800 p-3.5 rounded-2xl flex items-center justify-between gap-3 shadow-lg">
+                          <img 
+                            src={item.imageUrl || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c"} 
+                            alt={item.itemName || item.name} 
+                            className="w-12 h-12 rounded-xl object-cover border border-slate-700 shrink-0" 
+                          />
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-xs font-black text-white truncate">{item.itemName || item.name}</h4>
+                            <p className="text-xs font-black text-amber-500">₹{item.price}</p>
+                            <span className="text-[9px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-bold">
+                              {item.category}
+                            </span>
+                          </div>
+                          <button 
+                            onClick={() => toggleItemStock(idx)} 
+                            className={`px-3 py-1.5 rounded-xl font-black text-[10px] cursor-pointer shrink-0 ${item.inStock !== false ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'}`}
+                          >
                             {item.inStock !== false ? 'In Stock ✓' : 'Out of Stock ✕'}
                           </button>
                         </div>
