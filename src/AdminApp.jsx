@@ -342,7 +342,7 @@ export default function AdminApp() {
     
     const isPartnerOrShop = chatCategoryTab !== 'customers';
 
-    let messageContent = adminChatInput;
+   let messageContent = adminChatInput;
     if (adminSelectedFile) {
       messageContent = `<div class="space-y-2"><p>${adminChatInput}</p>${adminSelectedFile.type.includes('image') ? `<img src="${adminSelectedFile.url}" class="rounded-xl max-h-40 object-cover mt-1" />` : `<a href="${adminSelectedFile.url}" download="${adminSelectedFile.name}" class="text-xs underline text-amber-300">📎 ${adminSelectedFile.name}</a>`}</div>`;
     }
