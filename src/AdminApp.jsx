@@ -51,21 +51,18 @@ export default function AdminApp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: adminLoginPasswordInput })
       });
-      const data = await res.json();
+      const data = await res.json(); // 👈 ఇక్కడ '=' తరువాత '.' లేకుండా సరిగ్గా ఉంది
 
-      if (res.ok && (data.status === 'SUCCESS' || res.status === 200)) {
-        toast.success("✓ 4-digit OTP generated successfully!");
-        setStep(2); // 👈 స్టెప్ 2కి మారుతుంది (4-డిజిట్ పిన్ బాక్స్ చూపుతుంది)
-        if (data.whatsappRedirectUrl) {
-          setWhatsappRedirectLink(data.whatsappRedirectUrl);
-        }
+      if (res.ok) {
+        toast.success("✓ OTP sent directly to your WhatsApp number!");
+        setStep(2); // స్టెప్ 2 కి మారి 4-డిజిట్ పిన్ బాక్స్‌ను చూపుతుంది
       } else {
         toast.error(data.error || "Invalid Admin Password");
-        setAdminLoginError(data.error || "❌ తప్పు పాస్‌వర్డ్! దయచేసి సరైన పాస్‌వర్డ్ ఎంటర్ చేయండి.");
+        setAdminLoginError("❌ తప్పు పాస్‌వర్డ్!");
       }
     } catch (err) {
       toast.error("Network error during OTP request");
-      setAdminLoginError("❌ నెట్‌వర్క్ ఎర్రర్ ఏర్పడింది. సర్వర్ కనెక్షన్ తనిఖీ చేయండి.");
+      setAdminLoginError("❌ నెట్‌వర్క్ ఎర్రర్ ఏర్పడింది.");
     }
   };
   // 2. WhatsApp నుండి వచ్చిన OTP వెరిఫై చేసి అడ్మిన్ పేజీ ఓపెన్ చేసే ఫంక్షన్
