@@ -42,7 +42,7 @@ export default function AdminApp() {
   const [whatsappRedirectLink, setWhatsappRedirectLink] = useState('');
 
   // 1. పాస్‌వర్డ్ చెక్ చేసి WhatsApp కి OTP రిక్వెస్ట్ చేసే ఫంక్షన్
-  const handleRequestAdminOtp = async (e) => {
+ const handleRequestAdminOtp = async (e) => {
     e.preventDefault();
     setAdminLoginError('');
     try {
@@ -53,22 +53,21 @@ export default function AdminApp() {
       });
       const data = await res.json();
 
-      if (res.ok) {
-        toast.success("✓ 4-digit OTP sent to WhatsApp (7893521159) successfully!");
-        setStep(2); // 👈 ఇక్కడ స్టెప్ 2 కి మారి 4-డిజిట్ పిన్ బాక్స్ చూపిస్తుంది
+      if (res.ok && (data.status === 'SUCCESS' || res.status === 200)) {
+        toast.success("✓ 4-digit OTP generated successfully!");
+        setStep(2); // 👈 స్టెప్ 2కి మారుతుంది (4-డిజిట్ పిన్ బాక్స్ చూపుతుంది)
         if (data.whatsappRedirectUrl) {
           setWhatsappRedirectLink(data.whatsappRedirectUrl);
         }
       } else {
         toast.error(data.error || "Invalid Admin Password");
-        setAdminLoginError("❌ తప్పు పాస్‌వర్డ్! దయచేసి సరైన పాస్‌వర్డ్ ఎంటర్ చేయండి.");
+        setAdminLoginError(data.error || "❌ తప్పు పాస్‌వర్డ్! దయచేసి సరైన పాస్‌వర్డ్ ఎంటర్ చేయండి.");
       }
     } catch (err) {
       toast.error("Network error during OTP request");
-      setAdminLoginError("❌ నెట్‌వర్క్ ఎర్రర్ ఏర్పడింది.");
+      setAdminLoginError("❌ నెట్‌వర్క్ ఎర్రర్ ఏర్పడింది. సర్వర్ కనెక్షన్ తనిఖీ చేయండి.");
     }
   };
-
   // 2. WhatsApp నుండి వచ్చిన OTP వెరిఫై చేసి అడ్మిన్ పేజీ ఓపెన్ చేసే ఫంక్షన్
   const handleVerifyAdminOtp = async (e) => {
     e.preventDefault();
