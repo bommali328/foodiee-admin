@@ -42,54 +42,34 @@ export default function AdminApp() {
   const [whatsappRedirectLink, setWhatsappRedirectLink] = useState('');
 
   // 1. పాస్‌వర్డ్ చెక్ చేసి WhatsApp కి OTP రిక్వెస్ట్ చేసే ఫంక్షన్
- const handleRequestAdminOtp = async (e) => {
+ // ✅ వాట్సాప్ ఓటీపీ అవసరం లేకుండా కేవలం పాస్‌వర్డ్‌తో డైరెక్ట్ అడ్మిన్ లాగిన్
+  const handleAdminLogin = async (e) => {
     e.preventDefault();
     setAdminLoginError('');
+    
     try {
-      const res = await fetch(`${API_BASE_URL}/api/admin/auth/send-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: adminLoginPasswordInput })
       });
-      const data = await res.json(); // 👈 ఇక్కడ '=' తరువాత '.' లేకుండా సరిగ్గా ఉంది
 
-      if (res.ok) {
-        toast.success("✓ OTP sent directly to your WhatsApp number!");
-        setStep(2); // స్టెప్ 2 కి మారి 4-డిజిట్ పిన్ బాక్స్‌ను చూపుతుంది
-      } else {
-        toast.error(data.error || "Invalid Admin Password");
-        setAdminLoginError("❌ తప్పు పాస్‌వర్డ్!");
-      }
-    } catch (err) {
-      toast.error("Network error during OTP request");
-      setAdminLoginError("❌ నెట్‌వర్క్ ఎర్రర్ ఏర్పడింది.");
-    }
-  };
-  // 2. WhatsApp నుండి వచ్చిన OTP వెరిఫై చేసి అడ్మిన్ పేజీ ఓపెన్ చేసే ఫంక్షన్
-  const handleVerifyAdminOtp = async (e) => {
-    e.preventDefault();
-    setAdminLoginError('');
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/admin/auth/verify-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ otp: enteredAdminOtp })
-      });
-      const data = await res.json();
+      const data = await response.json();
 
-      if (res.ok) {
+      if (response.ok) {
+        toast.success("🎉 Admin Login Successful!");
         setIsAdminLoggedIn(true);
         localStorage.setItem('foodieeAdminAuth', 'true');
-        toast.success("🔓 Admin Access Granted Successfully via WhatsApp OTP!");
       } else {
-        toast.error(data.error || "Invalid or Expired OTP");
-        setAdminLoginError(data.error || "❌ తప్పు OTP లేదా గడువు ముగిసింది!");
+        toast.error(data.error || "❌ Invalid Admin Password!");
+        setAdminLoginError(data.error || "❌ తప్పు పాస్‌వర్డ్!");
       }
     } catch (err) {
-      toast.error("Network error during OTP verification");
+      toast.error("❌ Network error during admin login");
       setAdminLoginError("❌ నెట్‌వర్క్ ఎర్రర్ ఏర్పడింది.");
     }
   };
+  
 
   const [visiblePasswords, setVisiblePasswords] = useState({});
   const [editingPasswordId, setEditingPasswordId] = useState(null);
@@ -720,30 +700,30 @@ export default function AdminApp() {
 
           {/* 🌟 స్టెప్ 1: పాస్‌వర్డ్ ఎంటర్ చేసే ఫారమ్ */}
           {step === 1 ? (
-            <form onSubmit={handleRequestAdminOtp} className="space-y-4 text-left">
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Enter Admin Security Password</label>
-                <input 
-                  type="password" 
-                  value={adminLoginPasswordInput} 
-                  onChange={(e) => setAdminLoginPasswordInput(e.target.value)} 
-                  placeholder="••••••••••••" 
-                  className="w-full bg-slate-950 border border-slate-700/80 px-4 py-3.5 rounded-2xl text-xs font-bold text-white outline-none focus:border-amber-400 transition"
-                  required 
-                />
-              </div>
+           <form onSubmit={handleAdminLogin} className="space-y-4 text-left">
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Enter Admin Security Password</label>
+              <input 
+                type="password" 
+                value={adminLoginPasswordInput} 
+                onChange={(e) => setAdminLoginPasswordInput(e.target.value)} 
+                placeholder="••••••••••••" 
+                className="w-full bg-slate-950 border border-slate-700/80 px-4 py-3.5 rounded-2xl text-xs font-bold text-white outline-none focus:border-amber-400 transition"
+                required 
+              />
+            </div>
 
-              {adminLoginError && (
-                <p className="text-xs text-rose-400 font-bold text-center">{adminLoginError}</p>
-              )}
+            {adminLoginError && (
+              <p className="text-xs text-rose-400 font-bold text-center">{adminLoginError}</p>
+            )}
 
-              <button 
-                type="submit" 
-                className="w-full bg-gradient-to-r from-[#fc8019] to-amber-500 text-slate-950 py-3.5 rounded-2xl font-black text-xs shadow-lg cursor-pointer hover:opacity-95 transition"
-              >
-                Unlock Admin Command (Send OTP) 💬
-              </button>
-            </form>
+            <button 
+              type="submit" 
+              className="w-full bg-gradient-to-r from-[#fc8019] to-amber-500 text-slate-950 py-3.5 rounded-2xl font-black text-xs shadow-lg cursor-pointer hover:opacity-95 transition"
+            >
+              Login to Admin Portal 🚀
+            </button>
+          </form>
           ) : (
             /* 🌟 స్టెప్ 2: పాస్‌వర్డ్ కరెక్ట్ అయితే కింద 4-అంకెల పిన్ (OTP) ఎంటర్ చేసే ఆప్షన్ బాక్స్ */
             <form onSubmit={handleVerifyAdminOtp} className="space-y-4 text-left animate-fadeIn">
